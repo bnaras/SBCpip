@@ -1,0 +1,54 @@
+Package: SBCpip
+Title: Stanford Blood Center Platelet Inventory Prediction
+Version: 0.3-7
+VignetteBuilder: knitr
+Authors@R: c(
+        person(given = "Leying", family = "Guan",
+                    role = c("aut"), email = "leying.guan@gmail.com"),
+	person(given = "Robert J.", family = "Tibshirani",
+                    role = c("aut"), email = "tibs@stanford.edu"),
+	person(given = "Saurabh", family = "Gombar",
+                    role = c("aut"), email = "sgombar@stanford.edu"),
+	person(given = "Xiaoying", family = "Tian",
+                    role = c("ctb"), email = "xtian@stanford.edu"),
+	person(given = "Robert", family = "Scott",
+                    role = c("ctb"), email = "RoScott@stanfordhealthcare.org"),
+	person(given = "Alison J.", family = "Zemek",
+                    role = c("ctb"), email = "azemek@stanford.edu"),
+	person(given = "Tho Duc", family = "Pham",
+                    role = c("aut"), email = "thopham@stanford.edu"),
+	person(given = "Balasubramanian", family = "Narasimhan",
+                    role = c("aut", "cre"), email = "naras@stat.stanford.edu"),
+	person(given = "Gomathi", family = "Krishnan",
+                    role = c("ctb"), email = "gomathik@stanford.edu"))
+URL: https://bnaras.github.io/SBCpip
+BugReports: https://github.com/bnaras/SBCpip
+Description: Stanford Blood Center site specific package for preparing data for
+             forecasting platelet inventory. 
+Depends: R (>= 3.4.2)
+License: GPL (>= 2)
+Encoding: UTF-8
+LazyData: true
+Suggests:
+    knitr
+Imports:
+    dplyr,
+    readr,
+    readxl,
+    writexl,
+    magrittr,
+    tidyselect,
+    lubridate,
+    tidyverse,
+    tibble,
+    ggExtra,
+    shiny,
+    shinydashboard,
+    stringr,
+    tidyr,
+    rlang,
+    pip,
+    loggit,
+    jsonlite,
+    bibtex
+RoxygenNote: 6.1.0
