@@ -22,14 +22,14 @@ gg_color_hue <- function(n) {
 
 cols <- gg_color_hue(3L)
 
-set_config_param(param = "output_folder",
-                 value = "/Users/naras/R/packages/platelet-data/Blood_Center_Outputs")
-set_config_param(param = "log_folder",
-                 value = "/Users/naras/R/packages/platelet-data/Blood_Center_Logs")
-set_config_param(param = "report_folder",
-                 value = "/Users/naras/R/packages/platelet-data/Blood_Center_Reports")
-config <- set_config_param(param = "data_folder",
-                           value = "/Users/naras/R/packages/platelet-data/Blood_Center_inc")
+## set_config_param(param = "output_folder",
+##                  value = "/Users/naras/R/packages/platelet-data/Blood_Center_Outputs")
+## set_config_param(param = "log_folder",
+##                  value = "/Users/naras/R/packages/platelet-data/Blood_Center_Logs")
+## set_config_param(param = "report_folder",
+##                  value = "/Users/naras/R/packages/platelet-data/Blood_Center_Reports")
+## config <- set_config_param(param = "data_folder",
+##                            value = "/Users/naras/R/packages/platelet-data/Blood_Center_inc")
 
 sidebar <- dashboardSidebar(
     sidebarMenu(

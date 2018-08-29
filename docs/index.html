@@ -72,8 +72,9 @@
     <div id="sbcpip" class="section level1">
 <div class="page-header"><h1 class="hasAnchor">
 <a href="#sbcpip" class="anchor"></a>SBCpip</h1></div>
-<p><code>SBCpip</code> is an R package for processing Stanford Blood Center data in order to feed it to the Platelet Inventory Prediction (<code>pip</code>) package. The allows each site to build appropriate data processing workflows suitable independently to use the <code>pip</code> package.</p>
-<p>To install <code>SBCpip</code>, you need to install <a href="https://github.com/bnaras/pip"><code>pip</code></a> first following instructions given there.</p>
+<p><code>SBCpip</code> is an R package for processing Stanford Blood Center data. The data can then be fed to the <a href="https://bnaras.github.io/pip">Platelet Inventory Prediction (<code>pip</code>)</a> package.</p>
+<p>This separation allows each organization to build appropriate data processing workflows for local data in site-specific packages and not worry about the site-independent parts in the <code>pip</code> package.</p>
+<p>To install <code>SBCpip</code>, you need to first install <a href="https://github.com/bnaras/pip"><code>pip</code></a> first following instructions given there.</p>
 <p>Then, install <code>SBCpip</code> as below.</p>
 <pre class="{r}"><code>library(devtools)
 devtools::install_github("bnaras/SBCpip")</code></pre>
