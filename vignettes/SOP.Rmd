@@ -58,7 +58,6 @@ database, follow the procedure below.
 ```{r}
 library(SBCpip)
 options(warn = 1) ## Report warnings as they appear
-config <- get_SBC_config() ## Get default site specific configuration
 ```
 
 The `config` object is a rather large object that contains all
@@ -68,11 +67,22 @@ and output folders, as the example below shows.
 
 ```{r, eval = FALSE}
 ## Specify the data location
-config <- set_data_folder("full_path_to_historical_data")
-## existing report files will be overwritten
-config <- set_report_folder("full_path_to_report_folder") 
-## existing output files will be overwritten
-config <- set_output_folder("full_path_to_output_folder")
+config <- set_config_param(param = "data_folder",
+                           value = "full_path_to_historical_data")
+
+## Specify output folder; existing output files will be overwritten
+set_config_param(param = "output_folder",
+                 value = "full_path_to_output_folder")
+
+## Specify report folder; existing output files will be overwritten
+set_config_param(param = "report_folder",
+                 value = "full_path_to_report_folder")
+
+## Specify log folder; existing log files will be overwritten
+## Also get a handle on the invisibly returned updated configuration
+config <- set_config_param(param = "log_folder",
+                           value = "full_path_to_log_folder")
+
 ```
 
 One can then process all files in the data folder as follows and save
@@ -147,7 +157,7 @@ for (i in seq_along(all_dates)) {
     date_str <- as.character(all_dates[i])
     ##print(date_str)
     result <- predict_for_date(config = config, date = date_str)
-    prediction <- c(prediction, result$three_days_sum)
+    prediction <- c(prediction, result$t_pred)
 }
 ```
 

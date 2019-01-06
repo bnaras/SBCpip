@@ -1,6 +1,6 @@
 Package: SBCpip
 Title: Stanford Blood Center Platelet Inventory Prediction
-Version: 0.3-7
+Version: 0.3-8
 VignetteBuilder: knitr
 Authors@R: c(
         person(given = "Leying", family = "Guan",
@@ -51,4 +51,4 @@ Imports:
     loggit,
     jsonlite,
     bibtex
-RoxygenNote: 6.1.0
+RoxygenNote: 6.1.1

@@ -605,7 +605,7 @@ process_data_for_date <- function(config,
 
     if (length(cbc_file) != 1L || length(census_file) != 1L ||
         length(transfusion_file) != 1L || length(inventory_file) > 1L) {
-        loggit::logger(log_lvl = "ERROR", log_msg = "Too few or too many files matching patterns!")
+        loggit::loggit(log_lvl = "ERROR", log_msg = "Too few or too many files matching patterns!")
         stop("Too few or too many files matching patterns!")
     }
 
