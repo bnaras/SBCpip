@@ -892,17 +892,23 @@ predict_for_date <- function(config,
     new_data <- tail(dataset, n = 1)
 
     ## If it is time to update the model, do so
+    ## One way that can happen...
+    model_changed <- model_config_changed(prev_data$config, config)
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 4. Checking model age")
     model_needs_updating <- (multiple_dates_in_increment ||
                              is.null(prev_data$model_age) ||
+                             model_changed ||
                              (prev_data$model_age %% config$model_update_frequency == 0) ||
                              (date_diff > config$model_update_frequency))
     if (model_needs_updating) {
+        ## Provide informative log
         if (is.null(prev_data$model_age)) {
             prev_data$model_age <- 0L  ## Set age to 0 for first time
             loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. First time, so building model")
         } else if (multiple_dates_in_increment) {
             loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Multiple dates in data increment, so model training forced")
+        } else if (model_changed) {
+            loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Model changed, so model rebuilding and training forced")
         } else {
             loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Model is stale, so updating model")
         }
@@ -939,6 +945,8 @@ predict_for_date <- function(config,
     }
 
     prev_data$model_age <- prev_data$model_age + date_diff ## should it be by the diff?
+    ## Save configuration as well
+    prev_data$config <- config
 
     ## Save dataset back for next day
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 6. Save results for next day")
