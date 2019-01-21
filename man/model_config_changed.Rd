@@ -2,8 +2,7 @@
 % Please edit documentation in R/utilities.R
 \name{model_config_changed}
 \alias{model_config_changed}
-\title{Check if model parameters have changed in two configurations (to
-decide if model needs to be rebuilt)}
+\title{Check if model parameters have changed in two configurations.}
 \usage{
 model_config_changed(config1, config2)
 }
@@ -16,6 +15,7 @@ model_config_changed(config1, config2)
 TRUE or FALSE
 }
 \description{
-Check if model parameters have changed in two configurations (to
-decide if model needs to be rebuilt)
+We only consider those parameters that can be changed
+    by the webapp in detecting change. This is used to decide if
+    model needs to be rebuilt
 }
