@@ -107,7 +107,7 @@ body <- dashboardBody(
                       h3("Model Fitting Parameters")
                     , sliderInput(inputId = "c0"
                                 , label = "Minimum Remaining Units:"
-                                , min = 20
+                                , min = 5
                                 , max = 100
                                 , value = 30)
                     , sliderInput(inputId = "min_inventory"
