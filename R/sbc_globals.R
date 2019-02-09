@@ -35,7 +35,7 @@ SBC_config <- function() {
                              'EMERGENCY DEPARTMENT',
                              'F3', 'FGR', 'G1', 'G2P', 'G2S', 'H1', 'H2'),
 
-        c0 = 30, ## value for c0 to use in training model
+        c0 = 15, ## value for c0 to use in training model
         min_inventory = 30, ## the minimum inventory
         history_window = 200,  ## how many days to use in training
         penalty_factor = 15,   ## penalty factor to use in training
