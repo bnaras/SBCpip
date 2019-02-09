@@ -109,7 +109,7 @@ body <- dashboardBody(
                                 , label = "Minimum Remaining Units:"
                                 , min = 5
                                 , max = 100
-                                , value = 30)
+                                , value = get_SBC_config$c0)
                     , sliderInput(inputId = "min_inventory"
                                 , label = "Minimum Required Inventory Units:"
                                 , min = 20
