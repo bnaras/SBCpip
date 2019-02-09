@@ -53,7 +53,7 @@ SBC_config <- function() {
     )
     result$cbc_vars <- names(result$cbc_quantiles)[seq_len(9L)] ## Ignore HCT
     result$report_folder <- "E:/Blood_Center_Reports"
-    result$output_folder  <- "E:/Blood_Center_Output"
+    result$output_folder  <- "E:/Blood_Center_Outputs"
     result$log_folder <- "E:/Blood_Center_Logs"
     result
 }
