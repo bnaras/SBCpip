@@ -77,6 +77,7 @@ summarize_and_clean_cbc <- function(raw_data, cbc_abnormals, cbc_vars) {
                    errorMessage = "")
     raw_data %>%
         dplyr::filter(.data$BASE_NAME %in% cbc_vars) %>%
+        dplyr::distinct() %>%
         dplyr::mutate(CBC_VALUE = as.numeric(gsub("^<0.1", "0", .data$ORD_VALUE))) %>%
         dplyr::mutate(RESULT_DATE = as.Date(.data$RESULT_TIME)) %>%
         dplyr::select(.data$RESULT_DATE, .data$BASE_NAME, .data$CBC_VALUE, .data$ORD_VALUE) ->
@@ -225,6 +226,7 @@ summarize_and_clean_census <- function(raw_data, locations) {
 
     raw_data %>%
         dplyr::mutate(LOCATION_DT = as.Date(.data$LOCATION_DT)) %>%
+        dplyr::distinct() %>%
         dplyr::group_by(.data$LOCATION_DT, .data$LOCATION_NAME) %>%
         dplyr::summarize(count = dplyr::n()) %>%
         tidyr::spread(.data$LOCATION_NAME, .data$count) ->
@@ -360,6 +362,7 @@ summarize_and_clean_transfusion <- function(raw_data) {
 
     raw_data %>%
         dplyr::filter(.data$Type == "PLT") %>%
+        dplyr::distinct() %>%
         dplyr::mutate(date = as.Date(.data$`Issue Date/Time`)) %>%
         dplyr::select(.data$date) %>%
         dplyr::group_by(.data$date) %>%
