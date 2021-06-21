@@ -1,6 +1,6 @@
 Package: SBCpip
 Title: Stanford Blood Center Platelet Inventory Prediction
-Version: 0.3-9
+Version: 0.3-10
 VignetteBuilder: knitr
 Authors@R: c(
         person(given = "Leying", family = "Guan",
@@ -29,26 +29,20 @@ Depends: R (>= 3.4.2)
 License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
-Suggests:
-    knitr
-Imports:
-    dplyr,
-    readr,
-    readxl,
-    writexl,
-    magrittr,
-    tidyselect,
-    lubridate,
-    tidyverse,
-    tibble,
-    ggExtra,
-    shiny,
-    shinydashboard,
-    stringr,
-    tidyr,
-    rlang,
-    pip,
-    loggit,
-    jsonlite,
-    bibtex
-RoxygenNote: 6.1.1
+Suggests: knitr
+Imports: dplyr, readr, readxl, writexl, magrittr, tidyselect,
+        lubridate, tidyverse, tibble, ggExtra, shiny, shinydashboard,
+        stringr, tidyr, rlang, pip, loggit, jsonlite, bibtex
+RoxygenNote: 7.1.1
+NeedsCompilation: no
+Packaged: 2021-03-19 22:40:54 UTC; naras
+Author: Leying Guan [aut],
+  Robert J. Tibshirani [aut],
+  Saurabh Gombar [aut],
+  Xiaoying Tian [ctb],
+  Robert Scott [ctb],
+  Alison J. Zemek [ctb],
+  Tho Duc Pham [aut],
+  Balasubramanian Narasimhan [aut, cre],
+  Gomathi Krishnan [ctb]
+Maintainer: Balasubramanian Narasimhan <naras@stat.stanford.edu>
