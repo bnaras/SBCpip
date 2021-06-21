@@ -1,0 +1,213 @@
+---
+title: Stanford Blood Center Operating Procedures
+author: Balasubramanian Narasimhan
+date: '`r Sys.Date()`'
+bibliography: platelet.bib
+output:
+  html_document:
+  fig_caption: yes
+  theme: cerulean
+  toc: yes
+  toc_depth: 2
+vignette: >
+  %\VignetteIndexEntry{Stanford Blood Center Operating Procedures}
+  %\VignetteEngine{knitr::rmarkdown}
+  \usepackage[utf8]{inputenc}
+---
+
+## Introduction
+
+This is a brief introduction to how the `pip` package and `SBCpip`
+packages work together. 
+
+Why two packages?
+
+The `pip` package is meant to be site-independent. In other words, all
+it does is the training and prediction. In its current implementation,
+it tries very hard to be faithful the original @Guan11368 publication.
+
+The `SBCpip` is the Stanford Blood Center (SBC) site-specific
+package. The main job of `SBCpip` is to provide functionality
+tailor-made for the workflow in use at SBC. This task may sometimes be
+quite involved and prone to change.
+
+The separation makes it possible for sites to modify both packages to
+make use of many other features besides those used in the reference.
+
+__Note__ Some of the steps described here are SBC-specific and so
+don't be surprised if you don't have access to the data referred to.
+
+## Steps
+
+To get things started, one has to begin with some historical data on
+the CBC, census and transfusion to get the prediction pipeline going.
+
+The folder `Blood_Center` for example contains data for the period
+April 1, 2017 through April 9, 2018.  Note that the file created on
+April 9, for example, has data from the previous date.
+
+Such data can be used to build up a _seed_ database to start the
+prediction pipeline. 
+
+
+### Generating the Seed Data
+
+The seed database is generated exactly once. To build the seed
+database, follow the procedure below.
+
+```{r}
+library(SBCpip)
+options(warn = 1) ## Report warnings as they appear
+```
+
+The `config` object is a rather large object that contains all
+configuration information. It is documented with the
+package. Specifically, one can specify data folders, report folders
+and output folders, as the example below shows.
+
+```{r, eval = FALSE}
+## Specify the data location
+config <- set_config_param(param = "data_folder",
+                           value = "full_path_to_historical_data")
+
+## Specify output folder; existing output files will be overwritten
+set_config_param(param = "output_folder",
+                 value = "full_path_to_output_folder")
+
+## Specify report folder; existing output files will be overwritten
+set_config_param(param = "report_folder",
+                 value = "full_path_to_report_folder")
+
+## Specify log folder; existing log files will be overwritten
+## Also get a handle on the invisibly returned updated configuration
+config <- set_config_param(param = "log_folder",
+                           value = "full_path_to_log_folder")
+
+```
+
+One can then process all files in the data folder as follows and save
+the seed data.  Note that the files in the data folder are presumed to
+follow a naming pattern:
+- `LAB-BB-CSRP-CBC*` for CBC files
+- `LAB-BB-CSRP-Census*` for Census files
+- `LAB-BB-CSRP-Transfused*` for transfusion files. 
+
+The `process__all_...` functions below accept a `pattern` argument if
+you want to change them.
+
+
+```{r, eval = FALSE}
+## This is for creating the seed dataset
+cbc <- process_all_cbc_files(data_folder = config$data_folder,
+                             cbc_abnormals = config$cbc_abnormals,
+                             cbc_vars = config$cbc_vars,
+                             verbose = config$verbose)
+
+census <- process_all_census_files(data_folder = config$data_folder,
+                                   locations = config$census_locations,
+                                   verbose = config$verbose)
+
+transfusion <- process_all_transfusion_files(data_folder = config$data_folder,
+                                             verbose = config$verbose)
+
+## Save the SEED dataset so that we can begin the process of building the model.
+## This gets us to date 2018-04-09-08-01-54.txt, so we save data using that date
+saveRDS(list(cbc = cbc, census = census, transfusion = transfusion),
+        file = file.path(config$output_folder,
+                         sprintf(config$output_filename_prefix, "2018-04-09")))
+```
+
+At this point an `RDS` file is created that is sufficient to get
+started.
+
+## Processing Incremental Files
+
+Incremental files are also expected to follow a certain naming
+pattern. Default patterns are specified in the config variable. 
+
+- `config$cbc_filename_prefix` for cbc 
+- `config$census_filename_prefix` for census
+- `config$transfusion_filename_prefix` for transfusion
+- `config$inventory_file_name_prefix` for inventory (not used currently)
+
+One merely sets the data folder to point to the full path of the
+incremental files which is typically populated every day and proceed
+as below.
+
+```{r, eval = FALSE}
+
+## Now process the incremental files
+## Point to folder containing incrementals
+config <- set_data_folder("full_path_to_incremental_data")
+## One may or may not choose to set the incremental reports to go
+## to another location as shown below.
+config <- set_report_folder("full_path_to_incremental_data_reports")
+## Same for output although not shown.
+
+By specifying, the starting and ending dates, one can process all files in one swoop.
+
+```{r, eval = FALSE}
+start_date <- as.Date("2018-04-10")
+end_date <- as.Date("2018-05-29")
+all_dates <- seq.Date(from = start_date, to = end_date, by = 1)
+
+prediction <- NULL
+
+for (i in seq_along(all_dates)) {
+    date_str <- as.character(all_dates[i])
+    ##print(date_str)
+    result <- predict_for_date(config = config, date = date_str)
+    prediction <- c(prediction, result$t_pred)
+}
+```
+
+The above loop goes through several steps.
+
+1. It loads previous day's data
+2. It processes the incremental data and appends it to existing data
+3. It determines if the model needs to be updated. A parameter
+   `config$model_update_frequency` (default 7) decides how often the
+   model is retrained. The code can detect if the model is to be
+   constructed for the first time!
+4. If the model is retrained, the training dataset is constructed,
+   scaled, and scaling parameters stored for use in the
+   future. Otherwise, the existing scaling parameters are used to
+   construct the data set for prediction
+5. The prediction is made and results stored for the next day. The
+   current prediction is the three-day sum.
+
+## Daily Routine
+
+Thus, for daily routine, all that needs to be done is to call the
+function
+
+```{r, eval = FALSE}
+result <- predict_for_date(config = config)
+```
+
+This automatically assumes the date to be the current date. It can be
+specified if necessary using the `date` argument thus.
+
+```{r, eval = FALSE}
+result <- predict_for_date(config = config, date = "2018-04-30")
+```
+
+Note that this default daily routine makes the assumption that 
+- the data for day i is available early on day i + 1
+- the prediction is done on day i+1 for the purpose of ordering units,
+  i.e. there is sufficient time to be able to do this as regards the logistics
+- the prediction is really for day i, rather than day i + 1.
+
+Not paying attention to this can lead to off-by-one migranes!
+
+
+## Shiny Dashboard
+
+A shiny dashboard is available for those more used to point-and-click
+interfaces, invoked via `SBCpip::sbc_dashboard()`. 
+
+
+## References
+
+
+
