@@ -28,12 +28,10 @@ SBC_config <- function() {
             'WBC' = function(x) x > 10.3,   ## K/muL
             'HCT' = function(x) x < 34 ## NARAS ADDED THIS!!
         ),
-        census_locations = c('B1','B2', 'B3', 'C1', 'C2', 'C3',
-                             'CAPR XFER OVERFL', 'CATH PACU', 'CDU-CLIN DEC UNIT',
-                             'D1CC', 'D1CS', 'D2', 'D3', 'DGR',
-                             'E1', 'E2-ICU', 'E29-ICU', 'E3',
-                             'EMERGENCY DEPARTMENT',
-                             'F3', 'FGR', 'G1', 'G2P', 'G2S', 'H1', 'H2'),
+        census_locations = c("FGR", "E2-ICU", "C3", "E3",  "B3", "B2", "F3", 
+                             "C2", "E1", "B1", "H2", "VCP 3 WEST",
+                             "VCP 2 WEST", "VCP 1 WEST", "VCL SKILLED NURSING FACILITY", 
+                             "G2P", "G2S", "C1", "J2", "J4", "J5", "J6", "J7", "M5", "M6", "M7"), # (KO) Need to make this more dynamic
 
         c0 = 15, ## value for c0 to use in training model
         min_inventory = 30, ## the minimum inventory

@@ -240,14 +240,16 @@ server <- function(input, output, session) {
         opts <- options(warn = 1) ## Report warnings as they appear
         config <- SBCpip::get_SBC_config()
         log_file <- tempfile("SBCpip", fileext = ".json")
-        loggit::setLogFile(log_file)
+        loggit::set_logfile(log_file)
         output$predictionResult <- renderTable({
+            print(config$census_locations)
+            print(input$predictDate)
             SBCpip::predict_for_date(config = config, date = input$predictDate) %>%
                 dplyr::mutate_at("date", as.character)
         })
-        output$predictionLog <- renderTable({
-            jsonlite::read_json(log_file, simplifyVector = TRUE)
-        })
+        #output$predictionLog <- renderTable({
+        #    jsonlite::read_json(log_file, simplifyVector = TRUE)
+        #})
     })
 
     observeEvent(input$setValues, {

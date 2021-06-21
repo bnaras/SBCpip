@@ -7,7 +7,7 @@
 #'     list of missing values tibble and a summary tibble, cbc_data
 #'     (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
-#' @importFrom loggit setLogFile loggit
+#' @importFrom loggit set_logfile loggit
 #' @export
 read_one_cbc_file <- function(filename, cbc_abnormals, cbc_vars) {
     ## ORD_VALUE can have values like "<0.1", so we read as char
@@ -484,8 +484,11 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
     day_of_week <- t(sapply(base::weekdays(smoothed_cbc_features$date, abbreviate = TRUE),
                             function(x) {
                                 y <- day_of_week_vector
+                                #y <- rnorm(7)
+                                #names(y) <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
                                 y[x] <- 1
-                                y })
+                                y 
+                            })
                      )
     cbind(smoothed_cbc_features, day_of_week) %>%
         tibble::as.tibble()
@@ -504,7 +507,9 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
 create_dataset <- function(cbc_features, census, transfusion) {
     transfusion %>%
         dplyr::rename(plt_used = .data$used) %>%
-        dplyr::mutate(seven_lag = ma(.data$plt_used, window_size = 7L)) %>%
+        #dplyr::mutate(seven_lag = ma(.data$plt_used, window_size = 7L)) %>%
+        #dplyr::mutate(four_lag = ma(.data$plt_used, window_size = 4L)) %>%
+        dplyr::mutate(lag = ma(.data$plt_used, window_size = 7L)) %>%
         ## dplyr::mutate(plt_used = c(plt_used[-1], NA)) %>%  ## Not necessary because things are aligned already
         dplyr::inner_join({
             cbc_features %>%
@@ -521,7 +526,7 @@ create_dataset <- function(cbc_features, census, transfusion) {
     ## date, followed by names of days of week, seven_lag, other predictors, response
     response <- "plt_used"
     days_of_week <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-    first_columns <- c("date", days_of_week, "seven_lag")
+    first_columns <- c("date", days_of_week, "lag")
     other_columns <- setdiff(names(dataset), c(first_columns, response))
     dataset[, c(first_columns, other_columns, response)]
 }
@@ -536,10 +541,28 @@ create_dataset <- function(cbc_features, census, transfusion) {
 #' @importFrom tibble as.tibble
 #' @export
 scale_dataset <- function(dataset, center = NULL, scale = NULL) {
+    print(dataset)
+    # subtract day of week mean
+    #for (day in c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")) {
+    #    data_subset <- dataset[dataset[day] == 1,]
+    #    cols_remove <- c("date", "plt_used", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
+    #    col_means <- dataset[dataset[day] == 1, !(colnames(dataset) %in% cols_remove)] %>% colMeans(na.rm=TRUE)
+        
+    #    if (missing_center && missing_scale) {
+    #        dataset[dataset[day] == 1, !(colnames(dataset) %in% cols_remove)] <- 
+    #            dataset[dataset[day] == 1, !(colnames(dataset) %in% cols_remove)] - 
+    #            do.call("rbind", replicate(nrow(data_subset), col_means, simplify = FALSE))
+    #    }
+    #}
+    #print(dataset)
+    
     dataset %>%
-        dplyr::select(-.data$date, -.data$plt_used) ->
-        data_matrix ->
-        scaled_data
+        dplyr::select(-.data$date, -.data$plt_used, 
+                      #-.data$Mon, -.data$Tue, 
+                      #-.data$Wed, -.data$Thu, -.data$Fri, 
+                      #-.data$Sat, -.data$Sun
+                      ) ->
+        data_matrix -> scaled_data
 
     missing_center <- is.null(center)
     missing_scale <- is.null(scale)
@@ -550,6 +573,10 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
             scaled_data
         scale_info <- attributes(scaled_data)
         return(list(scaled_data = tibble::as.tibble(data.frame(date = dataset$date,
+                                                               #Mon = dataset$Mon,
+                                                               #Tue = dataset$Tue, Wed = dataset$Wed,
+                                                               #Thu = dataset$Thu, Fri = dataset$Fri,
+                                                               #Sat = dataset$Sat, Sun = dataset$Sun,
                                                                scaled_data,
                                                                plt_used = dataset$plt_used)),
                     center = scale_info$`scaled:center`,
@@ -564,6 +591,10 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
     }
 
     list(scaled_data = tibble::as.tibble(data.frame(date = dataset$date,
+                                                    #Mon = dataset$Mon,
+                                                    #Tue = dataset$Tue, Wed = dataset$Wed,
+                                                    #Thu = dataset$Thu, Fri = dataset$Fri,
+                                                    #Sat = dataset$Sat, Sun = dataset$Sun,
                                                     scaled_data,
                                                     plt_used = dataset$plt_used)),
          center = center,
@@ -815,7 +846,7 @@ process_all_inventory_files <- function(data_folder,
 #' @importFrom magrittr %>%
 #' @importFrom dplyr group_by summarize_all
 #' @return a prediction tibble named prediction_df with a column for date and the prediction
-#' @importFrom loggit setLogFile loggit
+#' @importFrom loggit set_logfile loggit
 #' @export
 predict_for_date <- function(config,
                              date = as.character(Sys.Date(), format = "%Y-%m-%d"),
@@ -880,16 +911,17 @@ predict_for_date <- function(config,
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3a. Creating CBC features")
     ## Create dataset.  SHOULD THIS BE ONLY ON THE WINDOW DATA???? Also is the +1 correct?
     cbc_features <- tail(create_cbc_features(cbc = cbc, cbc_quantiles = config$cbc_quantiles),
-                         config$history_window + 1)
-    census <- tail(census, config$history_window + 1)
-    transfusion <- tail(transfusion, config$history_window + 1)
+                         config$history_window + 1 + 7)
+    census <- tail(census, config$history_window + 1 + 7)
+    transfusion <- tail(transfusion, config$history_window + 1 + 7)
 
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3b. Creating training/prediction dataset")
     dataset <- prev_data$dataset <- create_dataset(cbc_features = cbc_features,
                                                    census = census,
                                                    transfusion = transfusion)
-    training_data <- head(dataset, n = config$history_window)
-    new_data <- tail(dataset, n = 1)
+    recent_data <- tail(dataset, n = config$history_window + 1)
+    training_data <- head(recent_data, n = config$history_window)
+    new_data <- tail(recent_data, n = 1)
 
     ## If it is time to update the model, do so
     ## One way that can happen...
@@ -913,7 +945,8 @@ predict_for_date <- function(config,
             loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Model is stale, so updating model")
         }
 
-        prev_data$scaled_dataset <- scaled_dataset <- scale_dataset(training_data)
+        prev_data$scaled_dataset <- scaled_dataset <- scale_dataset(training_data) # center and scale are NULL
+        
         prev_data$model <- pip::build_model(c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
@@ -924,6 +957,7 @@ predict_for_date <- function(config,
     } else {
         loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")
         ## use previous scaling which is available in the saved scaled_dataset
+        
         prev_data$scaled_dataset <- scaled_dataset <- scale_dataset(training_data,
                                                                     center = prev_data$scaled_dataset$center,
                                                                     scale = prev_data$scaled_dataset$scale)
@@ -1016,13 +1050,28 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
                                pattern = paste0("^",
                                                 substring(config$output_filename_prefix, first = 1, last = 10)),
                                full.names = TRUE)
+
     d <- readRDS(tail(output_files, 1))
-    d$dataset %>%
-        dplyr::select(.data$date, .data$plt_used) ->
-        d2
+    
+    
+    #d$dataset %>%
+    #    dplyr::select(.data$date, .data$plt_used) ->
+    #    d2
+    
+    # IMPORTANT:
+    # d$dataset only includes the "history_window" used to retrain the model + 7 days 
+    # d$prediction_df includes all dates in the prediction range
+    # d$transfusion, d$census, etc. include all seed dates + prediction dates
+    print(d$transfusion)
+    d2 <- tail(d$transfusion, nrow(d$prediction_df)) %>% 
+        rename(plt_used = used) %>% distinct(date, .keep_all = TRUE)
+    
+    # Important to replace plt_used and t_pred NA values with 0 
     tibble::tibble(date = dates) %>%
         dplyr::left_join(d2, by = "date") %>%
-        dplyr::left_join(d$prediction_df, by = "date") ->
+        dplyr::left_join(d$prediction_df, by = "date") %>% 
+        distinct(date, .keep_all = TRUE) %>%
+        tidyr::replace_na(list(plt_used = 0, t_pred = 0)) ->
         prediction_df
 
     N <- nrow(prediction_df)
@@ -1037,26 +1086,32 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     pred_mat <- matrix(0, nrow = N + 3, ncol = 12)
     colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s", "t_adj",
                             "r1_adj", "r2_adj","w_adj", "x_adj", "s_adj")
+    
     pred_mat[offset + (1:3), "x"] <- config$initial_collection_data
     pred_mat[offset + (1:3), "x_adj"] <- config$initial_collection_data
     index <- offset + 1
     t_adj <- t_pred
+    
     pred_mat[index, "w"] <- pip::pos(initial_expiry_data[1] - y[index])
     pred_mat[index, "r1"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
-    pred_mat[index, "s"] <- pip::pos(y[index] - initial_expiry_data[1] + initial_expiry_data[2] - pred_mat[index, "x"])
-    pred_mat[index, "r2"] <- pip::pos(pred_mat[index, "x"] - pip::pos(y[index] - initial_expiry_data[1] - initial_expiry_data[2]))
+    pred_mat[index, "s"] <- pip::pos(y[index] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
+    # Do we need waste below? I think so.
+    pred_mat[index, "r2"] <- pip::pos(pred_mat[index, "x"] - pip::pos(y[index] + pred_mat[index, "w"] - initial_expiry_data[1] - initial_expiry_data[2]))
     pred_mat[index + 3, "x"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
     pred_mat[index + 3, "x_adj"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
+    
     for (i in seq.int(offset + 2L, N)) {
         pred_mat[i, "w"] <- pip::pos(pred_mat[i - 1 , "r1"] - y[i])
         pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
         pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
-        pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
+        # Do we need waste below? I think so.
+        pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] + pred_mat[index, "w"] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
         pred_mat[i + 3, "x"] <- floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1))
         pred_mat[i, "w_adj"] <- pip::pos(pred_mat[i - 1 , "r1_adj"] - y[i])
         pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
         pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
-        pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
+        # Do we need waste below? I think so.
+        pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] + pred_mat[index, "w_adj"] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
         pred_mat[i+3,"x_adj"] <- floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1"] - pred_mat[i,"r2"]) - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"] + 1))
         t_adj[i] = t_adj[i] + pip::pos(min_inventory - pred_mat[i,"r1"] - pred_mat[i,"r2"])
     }
@@ -1069,7 +1124,8 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
         inventory
     tibble::as.tibble(cbind(prediction_df, pred_mat[seq_len(N), ])) %>%
         dplyr::left_join(inventory, by = "date") ->
-            pred_table
+        pred_table
+
     names(pred_table) <- c("date",
                            "Platelet usage",
                            "Three-day prediction",
