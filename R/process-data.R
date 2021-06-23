@@ -412,7 +412,7 @@ process_all_transfusion_files <- function(data_folder,
 #' @importFrom magrittr %>%
 #' @importFrom dplyr inner_join mutate select group_by summarize ungroup distinct first
 #' @importFrom tidyr spread replace_na
-#' @importFrom tibble as.tibble
+#' @importFrom tibble as_tibble
 #' @importFrom rlang quo !! .data
 #' @export
 create_cbc_features <- function(cbc, cbc_quantiles) {
@@ -461,7 +461,7 @@ create_cbc_features <- function(cbc, cbc_quantiles) {
 #' @return the data with features smoothed as a tibble
 #' @importFrom magrittr %>%
 #' @importFrom dplyr select
-#' @importFrom tibble as.tibble
+#' @importFrom tibble as_tibble
 #' @export
 smooth_cbc_features <- function(cbc_data, window_size = 7L) {
     cbc_data %>%
@@ -469,14 +469,14 @@ smooth_cbc_features <- function(cbc_data, window_size = 7L) {
         apply(MARGIN = 2, FUN = ma, window_size = window_size) ->
         d
     data.frame(date = cbc_data$date, d) %>%
-        tibble::as.tibble()
+        tibble::as_tibble()
 }
 
 #' Add columns for days of the week to smoothed data
 #' @param smoothed_cbc_features with the date and features
 #' @return the data with days of the week columns added as a tibble
 #' @importFrom magrittr %>%
-#' @importFrom tibble as.tibble
+#' @importFrom tibble as_tibble
 #' @export
 add_days_of_week_columns <- function(smoothed_cbc_features) {
     day_of_week_vector <- c(Mon = 0, Tue = 0, Wed = 0,
@@ -487,11 +487,11 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
                                 #y <- rnorm(7)
                                 #names(y) <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
                                 y[x] <- 1
-                                y 
+                                y
                             })
                      )
     cbind(smoothed_cbc_features, day_of_week) %>%
-        tibble::as.tibble()
+        tibble::as_tibble()
 }
 #' Construct a dataset for use in forecasting
 #' @param cbc_features the tibble of cbc features
@@ -538,30 +538,13 @@ create_dataset <- function(cbc_features, census, transfusion) {
 #' @return a list consisting of scaled data (date not touched) and center and scale
 #' @importFrom magrittr %>%
 #' @importFrom dplyr select
-#' @importFrom tibble as.tibble
+#' @importFrom tibble as_tibble
 #' @export
 scale_dataset <- function(dataset, center = NULL, scale = NULL) {
     print(dataset)
-    # subtract day of week mean
-    #for (day in c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")) {
-    #    data_subset <- dataset[dataset[day] == 1,]
-    #    cols_remove <- c("date", "plt_used", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
-    #    col_means <- dataset[dataset[day] == 1, !(colnames(dataset) %in% cols_remove)] %>% colMeans(na.rm=TRUE)
-        
-    #    if (missing_center && missing_scale) {
-    #        dataset[dataset[day] == 1, !(colnames(dataset) %in% cols_remove)] <- 
-    #            dataset[dataset[day] == 1, !(colnames(dataset) %in% cols_remove)] - 
-    #            do.call("rbind", replicate(nrow(data_subset), col_means, simplify = FALSE))
-    #    }
-    #}
-    #print(dataset)
-    
+
     dataset %>%
-        dplyr::select(-.data$date, -.data$plt_used, 
-                      #-.data$Mon, -.data$Tue, 
-                      #-.data$Wed, -.data$Thu, -.data$Fri, 
-                      #-.data$Sat, -.data$Sun
-                      ) ->
+        dplyr::select(-.data$date, -.data$plt_used) ->
         data_matrix -> scaled_data
 
     missing_center <- is.null(center)
@@ -572,11 +555,7 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
             scale ->
             scaled_data
         scale_info <- attributes(scaled_data)
-        return(list(scaled_data = tibble::as.tibble(data.frame(date = dataset$date,
-                                                               #Mon = dataset$Mon,
-                                                               #Tue = dataset$Tue, Wed = dataset$Wed,
-                                                               #Thu = dataset$Thu, Fri = dataset$Fri,
-                                                               #Sat = dataset$Sat, Sun = dataset$Sun,
+        return(list(scaled_data = tibble::as_tibble(data.frame(date = dataset$date,
                                                                scaled_data,
                                                                plt_used = dataset$plt_used)),
                     center = scale_info$`scaled:center`,
@@ -590,11 +569,7 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
         scaled_data <- sweep(x = scaled_data, MARGIN = 2L, STATS = scale, FUN = "/")
     }
 
-    list(scaled_data = tibble::as.tibble(data.frame(date = dataset$date,
-                                                    #Mon = dataset$Mon,
-                                                    #Tue = dataset$Tue, Wed = dataset$Wed,
-                                                    #Thu = dataset$Thu, Fri = dataset$Fri,
-                                                    #Sat = dataset$Sat, Sun = dataset$Sun,
+    list(scaled_data = tibble::as_tibble(data.frame(date = dataset$date,
                                                     scaled_data,
                                                     plt_used = dataset$plt_used)),
          center = center,
@@ -946,7 +921,7 @@ predict_for_date <- function(config,
         }
 
         prev_data$scaled_dataset <- scaled_dataset <- scale_dataset(training_data) # center and scale are NULL
-        
+
         prev_data$model <- pip::build_model(c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
@@ -957,7 +932,7 @@ predict_for_date <- function(config,
     } else {
         loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")
         ## use previous scaling which is available in the saved scaled_dataset
-        
+
         prev_data$scaled_dataset <- scaled_dataset <- scale_dataset(training_data,
                                                                     center = prev_data$scaled_dataset$center,
                                                                     scale = prev_data$scaled_dataset$scale)
@@ -1040,7 +1015,7 @@ get_prediction_and_usage <- function(config, start_date, end_date) {
 #' @importFrom magrittr %>%
 #' @importFrom rlang .data
 #' @importFrom dplyr select left_join
-#' @importFrom tibble as.tibble
+#' @importFrom tibble as_tibble
 #' @export
 build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2, generate_report = TRUE,
                                    offset = config$start - 1,
@@ -1052,24 +1027,23 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
                                full.names = TRUE)
 
     d <- readRDS(tail(output_files, 1))
-    
-    
+
+
     #d$dataset %>%
     #    dplyr::select(.data$date, .data$plt_used) ->
     #    d2
-    
+
     # IMPORTANT:
-    # d$dataset only includes the "history_window" used to retrain the model + 7 days 
+    # d$dataset only includes the "history_window" used to retrain the model + 7 days
     # d$prediction_df includes all dates in the prediction range
     # d$transfusion, d$census, etc. include all seed dates + prediction dates
-    print(d$transfusion)
-    d2 <- tail(d$transfusion, nrow(d$prediction_df)) %>% 
+    d2 <- tail(d$transfusion, nrow(d$prediction_df)) %>%
         rename(plt_used = used) %>% distinct(date, .keep_all = TRUE)
-    
-    # Important to replace plt_used and t_pred NA values with 0 
+
+    # Important to replace plt_used and t_pred NA values with 0
     tibble::tibble(date = dates) %>%
         dplyr::left_join(d2, by = "date") %>%
-        dplyr::left_join(d$prediction_df, by = "date") %>% 
+        dplyr::left_join(d$prediction_df, by = "date") %>%
         distinct(date, .keep_all = TRUE) %>%
         tidyr::replace_na(list(plt_used = 0, t_pred = 0)) ->
         prediction_df
@@ -1086,12 +1060,12 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     pred_mat <- matrix(0, nrow = N + 3, ncol = 12)
     colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s", "t_adj",
                             "r1_adj", "r2_adj","w_adj", "x_adj", "s_adj")
-    
+
     pred_mat[offset + (1:3), "x"] <- config$initial_collection_data
     pred_mat[offset + (1:3), "x_adj"] <- config$initial_collection_data
     index <- offset + 1
     t_adj <- t_pred
-    
+
     pred_mat[index, "w"] <- pip::pos(initial_expiry_data[1] - y[index])
     pred_mat[index, "r1"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
     pred_mat[index, "s"] <- pip::pos(y[index] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
@@ -1099,20 +1073,26 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     pred_mat[index, "r2"] <- pip::pos(pred_mat[index, "x"] - pip::pos(y[index] + pred_mat[index, "w"] - initial_expiry_data[1] - initial_expiry_data[2]))
     pred_mat[index + 3, "x"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
     pred_mat[index + 3, "x_adj"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
-    
-    for (i in seq.int(offset + 2L, N)) {
+
+    for (i in seq.int(index + 1L, N)) {
+        # These are the constraint parameters without adjusting for the minimum inventory
         pred_mat[i, "w"] <- pip::pos(pred_mat[i - 1 , "r1"] - y[i])
         pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
         pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
         # Do we need waste below? I think so.
-        pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] + pred_mat[index, "w"] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
+        pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] + pred_mat[i, "w"] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
         pred_mat[i + 3, "x"] <- floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1))
+
+        # This set ensures that we have ordered not only enough to satisfy our prediction, but
+        # also enough to replenish to our minimum inventory.
         pred_mat[i, "w_adj"] <- pip::pos(pred_mat[i - 1 , "r1_adj"] - y[i])
         pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
         pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
         # Do we need waste below? I think so.
-        pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] + pred_mat[index, "w_adj"] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
+        pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] + pred_mat[i, "w_adj"] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
         pred_mat[i+3,"x_adj"] <- floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1"] - pred_mat[i,"r2"]) - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"] + 1))
+
+        # Why do we adjust the 3 day usage prediction? This seems independent of the inventory.
         t_adj[i] = t_adj[i] + pip::pos(min_inventory - pred_mat[i,"r1"] - pred_mat[i,"r2"])
     }
     pred_mat[1:N,"t_adj"] = t_adj
@@ -1122,7 +1102,8 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     d$inventory %>%     ## Drop the time part!
         mutate(date = as.Date(date)) ->
         inventory
-    tibble::as.tibble(cbind(prediction_df, pred_mat[seq_len(N), ])) %>%
+
+    tibble::as_tibble(cbind(prediction_df, pred_mat[seq_len(N), ])) %>%
         dplyr::left_join(inventory, by = "date") ->
         pred_table
 
@@ -1153,6 +1134,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
                          report_folder = config$report_folder,
                          filename = filename)
     }
+    print(pred_table)
 
     pred_table
 }
