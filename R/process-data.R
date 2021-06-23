@@ -1100,15 +1100,19 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     pred_mat[, "Alert"] <- (pred_mat[, "r1"] + pred_mat[, "r2"] <= min_inventory)
 
     d$inventory %>%     ## Drop the time part!
-        mutate(date = as.Date(date)) ->
+        dplyr::mutate(date = as.Date(date)) ->
         inventory
 
     tibble::as_tibble(cbind(prediction_df, pred_mat[seq_len(N), ])) %>%
+        dplyr::mutate(t_true = lead(plt_used, 1) + lead(plt_used, 2) + lead(plt_used, 3)
+                      ) %>%
+        dplyr::relocate(t_true, .after = plt_used) %>%
         dplyr::left_join(inventory, by = "date") ->
         pred_table
 
     names(pred_table) <- c("date",
                            "Platelet usage",
+                           "Three-day actual usage",
                            "Three-day prediction",
                            "Alert",
                            "No. expiring in 1 day",
