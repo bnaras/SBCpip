@@ -236,7 +236,8 @@ summarize_and_clean_census <- function(raw_data, locations) {
         ##result$errorMessage <- "Census is missing some locations used in the model!"
         ##return(result)
         missing_locations <- setdiff(locations, names(census_data)[-1])
-        census_data[, missing_locations] <- NA
+        #census_data[, missing_locations] <- NA
+        census_data[, missing_locations] <- 0 # (KO) should probably be 0, not NA (helps with downstream prediction and)
     }
     ## This is also the summary
     result$summary <- census_data
@@ -595,6 +596,8 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
 process_data_for_date <- function(config,
                                   date = as.character(Sys.Date(), format = "%Y-%m-%d")) {
 
+    loggit::set_logfile(logfile = paste(config$log_folder, sprintf(config$log_filename_prefix, date), sep="/"))
+
     cbc_file <- list.files(path = config$data_folder,
                            pattern = sprintf(config$cbc_filename_prefix, date),
                            full.names = TRUE)
@@ -922,13 +925,21 @@ predict_for_date <- function(config,
 
         prev_data$scaled_dataset <- scaled_dataset <- scale_dataset(training_data) # center and scale are NULL
 
+        # ensure that no NA values are fed into build_model
+        data <- as.data.frame(scaled_dataset$scaled_data)
+        if (sum(is.na(data)) > 0) {
+            data[is.na(data)] <- 0
+            loggit::loggit(log_lvl = "WARN", log_msg ='Warning: NA values found in scaled dataset - replacing with 0')
+        }
+
+
         prev_data$model <- pip::build_model(c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
                                             initial_expiry_data = config$initial_expiry_data,
                                             initial_collection_data = config$initial_collection_data,
                                             start = config$start,
-                                            data = as.data.frame(scaled_dataset$scaled_data))
+                                            data = data)
     } else {
         loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")
         ## use previous scaling which is available in the saved scaled_dataset
