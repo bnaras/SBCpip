@@ -98,10 +98,10 @@ body <- dashboardBody(
                   )
                 , box(
                       h3("Input and Output Locations")
-                    , textInput(inputId = "data_folder", label = "Data Folder", value = SBCpip::get_SBC_config()$data_folder)
-                    , textInput(inputId = "report_folder", label = "Report Folder", value = SBCpip::get_SBC_config()$report_folder)
-                    , textInput(inputId = "output_folder", label = "Output Folder", value = SBCpip::get_SBC_config()$output_folder)
-                    , textInput(inputId = "log_folder", label = "Log Folder", value = SBCpip::get_SBC_config()$log_folder)
+                    , textInput(inputId = "data_folder", label = "Data Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_inc")
+                    , textInput(inputId = "report_folder", label = "Report Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Reports")
+                    , textInput(inputId = "output_folder", label = "Output Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Outputs")
+                    , textInput(inputId = "log_folder", label = "Log Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Logs")
                   )
                 , box(
                       h3("Model Fitting Parameters")
@@ -216,7 +216,11 @@ server <- function(input, output, session) {
                         t ->
                         tmp
                 tibble::tibble(Location = rownames(tmp), Count = as.integer(tmp[, 1])) %>%
-                    dplyr::arrange(Location)
+                    dplyr::arrange(Location) %>%
+                    dplyr::mutate(Count = tidyr::replace_na(Count, 0))
+            }
+            else {
+                tibble::tibble(Error = "No report found for given date")
             }
         })
     })
@@ -242,8 +246,6 @@ server <- function(input, output, session) {
         log_file <- tempfile("SBCpip", fileext = ".json")
         loggit::set_logfile(log_file)
         output$predictionResult <- renderTable({
-            print(config$census_locations)
-            print(input$predictDate)
             SBCpip::predict_for_date(config = config, date = input$predictDate) %>%
                 dplyr::mutate_at("date", as.character)
         })
@@ -278,24 +280,26 @@ server <- function(input, output, session) {
         config <- SBCpip::get_SBC_config()
         input$min_inventory
         build_prediction_table(config, generate_report = FALSE,
-                               start_date = as.Date("2018-04-10"), end_date = Sys.Date()) %>%
-            dplyr::select(1,2, 10:15) %>%
+                               start_date = as.Date("2020-08-20"), end_date = as.Date("2020-09-15")) %>%
+            dplyr::select(date,`Platelet usage`, starts_with("Adj.")) %>%
             dplyr::mutate_at("date", as.character) %>%
             dplyr::filter(dplyr::row_number() > config$start) ->
             d
 
+        # Number of units expiring in 1 day (4) + number expiring in 2 days (5)
         p1 <- ggplot2::ggplot() +
             ggplot2::geom_histogram(mapping = ggplot2::aes(x = dplyr::pull(d[, 4]) + dplyr::pull(d[, 5])),
                                     bins = 100, color = cols[3]) +
             ggplot2::labs(x = "Remaining Units", title = "")
 
+        # Adjusted waste
         p2 <- ggplot2::ggplot() +
             ggplot2::geom_histogram(mapping = ggplot2::aes(x = dplyr::pull(d[, 6])),
                                     bins = 100, color = cols[3]) +
             ggplot2::labs(x = "Wasted Units", title = "")
 
         d %>%
-            dplyr::select(1,2,4,5) %>%
+            dplyr::select(date,`Platelet usage`, `Adj. no. expiring in 1 day`, `Adj. no. expiring in 2 days`) %>%
             dplyr::mutate(date = as.Date(date),
                           `Actual usage` = `Platelet usage`,
                           `Estimated usage` = `Adj. no. expiring in 1 day` + `Adj. no. expiring in 2 days`) %>%
