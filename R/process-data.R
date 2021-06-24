@@ -1131,6 +1131,14 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
                            "Inv. expiring in 2 days",
                            "Inv. expiring in 2+ days")
 
+    # Compute "true" values for waste, fresh orders, and shortage
+    pred_table %>%
+        dplyr::mutate(`True Waste` = pip::pos(`Inv. expiring in 1 day` - `Platelet usage`)) %>%
+        dplyr::mutate(`Fresh Units Ordered` = lead(`Inv. count`, 1) - `Inv. count` +
+                          `Platelet usage` + `True Waste`) %>%
+        dplyr::mutate(`True Shortage` = pip::pos(`Platelet usage` - `Inv. count` - `Fresh Units Ordered`)) ->
+        pred_table
+
     if (generate_report) {
         todays_date <- as.character(Sys.Date(), format = "%Y-%m-%d")
         filename <- sprintf("prediction-report-%s", todays_date)
