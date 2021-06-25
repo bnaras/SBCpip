@@ -932,7 +932,6 @@ predict_for_date <- function(config,
             loggit::loggit(log_lvl = "WARN", log_msg ='Warning: NA values found in scaled dataset - replacing with 0')
         }
 
-
         prev_data$model <- pip::build_model(c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
@@ -956,6 +955,12 @@ predict_for_date <- function(config,
                                      scale = scaled_dataset$scale)$scaled_data
     prediction <- pip::predict_three_day_sum(model = prev_data$model,
                                              new_data = as.data.frame(new_scaled_data)) ## last row is what we  want to predict for
+
+    # Make sure prediction is returning a valid response. No point in continuing otherwise.
+    if (is.nan(prediction)) {
+        stop(sprintf("Next three day prediction returned NaN for %s", date))
+    }
+
     prediction_df <- tibble::tibble(date = new_data$date, t_pred = prediction)
 
     if (is.null(prev_data$prediction_df)) {
@@ -1034,11 +1039,13 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     dates <- seq.Date(from = start_date, to = end_date, by = 1)
     output_files <- list.files(path = config$output_folder,
                                pattern = paste0("^",
-                                                substring(config$output_filename_prefix, first = 1, last = 10)),
+                                                sprintf(config$output_filename_prefix, as.character(end_date))),
                                full.names = TRUE)
 
+    if (length(output_files) == 0) {
+        stop(sprintf("No output file found for the prediction end date: %s", as.character(end_date)))
+    }
     d <- readRDS(tail(output_files, 1))
-
 
     #d$dataset %>%
     #    dplyr::select(.data$date, .data$plt_used) ->
