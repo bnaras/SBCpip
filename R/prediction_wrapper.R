@@ -1,10 +1,13 @@
+#%%%%%%%%%%%%%%%%% Prediction Helper Functions %%%%%%%%%%%%%%%%%
+
 #' Generate .RDS file for seed data to be used in prediction
+#'
 #' @param pred_start_date, the start date for the prediction, used to specify
 #'     date range for the seed dataset.
 #' @param config the site-specific configuration
 #' @return nothing (saves an RDS file with the seed data for 1 day before prediction date)
-#' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @importFrom loggit set_logfile loggit
+#' @importFrom magrittr %<>%
 #' @export
 sbc_build_and_save_seed_data <- function(pred_start_date, config) {
 
@@ -29,6 +32,7 @@ sbc_build_and_save_seed_data <- function(pred_start_date, config) {
 }
 
 #' Predict product usage and corresponding order schedule over specified date range
+#'
 #' @param pred_start_date, the start date for the prediction, used to specify
 #'     date range for the seed dataset.
 #' @param num_days, the number of days to predict from pred_start_date
@@ -46,64 +50,11 @@ sbc_predict_for_range <- function(pred_start_date, num_days, config) {
   prediction_df <- NULL
   for (i in seq_along(all_pred_dates)) {
     date_str <- as.character(all_pred_dates[i])
-    loggit::loggit(log_lvl = "INFO", log_msg = paste("Predicting for date:", date))
+    loggit::loggit(log_lvl = "INFO", log_msg = paste0("Predicting for date: ", date_str))
     result <- predict_for_date(config = config, date = date_str)
     prediction_df <- rbind(prediction_df,result)
   }
   prediction_df
-}
-
-#' Retrieve true transfusion data from the files (this fetches data from all files in folder)
-#' @param
-#' @param
-#' @return a tibble with the true transfusion/product usage data.
-#' @importFrom dplyr distinct, arrange
-#' @export
-process_all_transfusion_files_no_reports <- function(data_folder,
-                                                     pattern = "LAB-BB-CSRP-Transfused*") {
-  fileList <- list.files(data_folder, pattern = pattern , full.names = TRUE)
-  names(fileList) <- basename(fileList)
-  raw_transfusion <- lapply(fileList, read_one_transfusion_file)
-
-  Reduce(f = rbind,
-         lapply(raw_transfusion, function(x) x$transfusion_data)) %>%
-    dplyr::distinct() %>%
-    dplyr::arrange(date)
-}
-
-#' Construct a tibble of predicted vs. true usage over specified prediction date range.
-#' @param pred_start_date, the start date for the prediction, used to specify
-#'     date range for the seed dataset.
-#' @param num_days, the number of days to predict from pred_start_date
-#' @param config the site-specific configuration
-#' @return a tibble of predicted vs. true usage
-#' @importFrom loggit loggit
-#' @export
-get_pred_vs_true <- function(pred_start_date, num_days, config)  {
-
-  pred_end_date <- pred_start_date + num_days
-  transfusion_inc <- process_all_transfusion_files_no_reports(data_folder = config$data_folder)
-  transfusion_dates <- sapply(transfusion_inc$date, function(x) {
-    as.character(x, format = "%Y-%m-%d")
-  })
-  transfusion_used <- as.numeric(transfusion_inc$used)
-  plt_used_df <- data.frame(transfusion_dates, transfusion_used)
-  plt_used_tbl <- as_tibble(plt_used_df[1:nrow(plt_used_df),])
-  plt_used_tbl$transfusion_dates %<>% as.Date
-  names(plt_used_tbl) = c("date", "d_true")
-
-  plt_used_tbl %<>% filter(date >= pred_start_date) %<>% filter(date <= pred_end_date)
-
-  prediction %>% left_join(plt_used_tbl, by="date") -> pred_and_true
-
-  # The "true" usage (t_true) is the sum of the usage over the ensuing 3 days (i+1, i+2, i+3)
-  pred_and_true %>%
-    mutate(dlead1 = lead(pred_and_true$d_true, 1)) %>%
-    mutate(dlead2 = lead(pred_and_true$d_true, 2)) %>%
-    mutate(dlead3 = lead(pred_and_true$d_true, 3)) %>%
-    mutate(t_true = dlead1 + dlead2 + dlead3)
-  pred_and_true %>% filter(is.na(t_true))
-  pred_and_true <- pred_and_true[2:(nrow(pred_and_true)-2),] # remove NAs
 }
 
 #' Fetch model coefficients based on generated output files
@@ -114,40 +65,222 @@ get_pred_vs_true <- function(pred_start_date, num_days, config)  {
 #' @return a data frame containing the coefficients generated during the prediction
 #'
 #' @importFrom loggit loggit
+#' @importFrom dplyr relocate
+#' @importFrom magrittr %>%
 #' @export
 get_coefs_over_time <- function(pred_start_date, num_days, config) {
   # Collect model coefficients over all output files (only need one set per week)
-  # [Would be good to allow for start and end date specifications - throw error if file not available]
-  #output_files <- list.files(path = config$output_folder,
-  #                           pattern = paste0("^",
-  #                                            substring(config$output_filename_prefix, first = 1, last = 10)),
-  #                           full.names = TRUE)
 
   model_coefs <- NULL
-  #loggit::loggit(log_lvl = "INFO", log_msg = paste("Number of days to process:", length(output_files)))
   pred_end_date <- pred_start_date + num_days
-  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date,
-                             by = config$model_update_frequency)
+  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by=1)
 
-  # Read model coefs according to cadency of output frequency
-  for (i in seq_along(all_pred_dates)) {
+  # Read model coefs according to cadence of output frequency
+  for (i in seq(1, num_days, config$model_update_frequency)) {
     date <- all_pred_dates[i]
     output_file <- list.files(path = config$output_folder,
                pattern = sprintf(config$output_filename_prefix, date),
                full.names = TRUE)
+
     if (length(output_file) == 0) {
-      print("No output files generated for date", date)
-      return()
+      print(paste0("No output files generated for date ", date))
     }
-    d <- readRDS(output_file)
-    model_coefs %>% rbind(c(d$model$coefs, lambda = d$model$lambda)) -> model_coefs
-    print(paste("Added model coefs for day", i))
+    else {
+      d <- readRDS(output_file)
+      model_coefs %>% rbind(c(d$model$coefs, lambda = d$model$lambda)) -> model_coefs
+      print(paste("Added model coefs for day", i))
+    }
+  }
+  coef.tbl <- as_tibble(model_coefs)
+  all_coef_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 7)
+  coef.tbl$date = all_coef_dates
+  coef.tbl %>% dplyr::relocate(date) -> coef.tbl
+  coef.tbl
+}
+
+#' Generate the full dataset used for prediction without relying on output RDS files
+#'
+#' Useful for applying different prediction techniques to the same data. Note that
+#' this has the side-effect of producing reports in the report folder for each date due
+#' to the process_data_for_date function.
+#'
+#' @param pred_start_date, the start date for the prediction, used to specify
+#'     date range for the seed dataset.
+#' @param num_days, the number of days to predict from pred_start_date
+#' @param config the site-specific configuration
+#' @return a dataset tibble with date, product usage (transfusion), CBC, census, and inventory
+#' @importFrom dplyr left_join rename mutate
+#' @importFrom magrittr %>%, %<>%
+#' @export
+generate_full_dataset <- function(pred_start_date, num_days, config) {
+  pred_end_date <- pred_start_date + num_days
+  pred_inputs <- list(cbc = NULL, census = NULL, transfusion = NULL, inventory = NULL)
+  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1)
+
+  for (i in seq_along(all_pred_dates)) {
+    date_str <- as.character(all_pred_dates[i])
+    inputs_single_day <- process_data_for_date(config = config, date = date_str)
+    pred_inputs$cbc %<>% rbind(inputs_single_day$cbc)
+    pred_inputs$census %<>% rbind(inputs_single_day$census)
+    pred_inputs$transfusion %<>% rbind(inputs_single_day$transfusion)
+    pred_inputs$inventory %<>% rbind(inputs_single_day$inventory)
   }
 
-  data.frame(model_coefs)
+  full_dataset <- create_cbc_features(pred_inputs$cbc, config$cbc_quantiles)
+  pred_inputs$inventory$date %<>% as.Date()
+  full_dataset %>%
+    dplyr::left_join(pred_inputs$census, by="date") %>%
+    dplyr::left_join(pred_inputs$transfusion, by="date") %>%
+    dplyr::left_join(pred_inputs$inventory, by="date") %>%
+    dplyr::mutate(dow = weekdays(date)) -> full_dataset
+
+  full_dataset %>% distinct() %>%
+    dplyr::rename(plt_used = .data$used) %>%
+    dplyr::mutate(lag = ma(.data$plt_used, window_size = 7L)) -> full_dataset
+
+  full_dataset
 }
 
+#%%%%%%%%%%%%%%%%% Prediction Table Analysis Wrapper Functions %%%%%%%%%%%%%%%%%
+#' Plot the predicted vs. true product usage over the appropriate date range
+#'
+#' @param pred_table, the prediction table generated from SBCpip::build_prediction_table
+#'
+#' @importFrom dplyr filter
+#' @importFrom ggplot2 ggplot geom_line
+#' @importFrom magrittr %>%
+#' @export
+plot_pred_vs_true_usage <- function(pred_table) {
 
-evaluate_model_over_range <- function(config) {
+  first_day <- pred_table$date[1]
+  last_day <- pred_table$date[nrow(pred_table) - 3] # predictions end 3 days early
+  pred_table_trunc <- pred_table %>%
+    dplyr::filter(date >= first_day) %>%
+    dplyr::filter(date <= last_day)
+
+  ggplot2::ggplot(data=pred_table_trunc) +
+    ggplot2::geom_line(aes(x=date, y=`Three-day actual usage`)) +
+    ggplot2::geom_line(aes(x=date, y=`Three-day prediction`))
+}
+
+#' Compute the loss value on a validation or test dataset from the original
+#' and adjusted waste and inventory levels based on model projections.
+#'
+#' The loss formula is given by the sum of the waste plus the sum of the squared positive
+#' difference between the desired inventory level and the remaining inventory, as per
+#' pip::build_model. This can be used to standardize and compare the efficacy of different
+#' models.
+#'
+#' @param pred_table, the prediction table generated from SBCpip::build_prediction_table
+#' @param config the site-specific configuration
+#' @return a list containing the projected average daily loss and adjusted average daily loss
+#' @importFrom pip pos
+#' @export
+projection_loss <- function(pred_table, config) {
+  ## (from pip/func.R) Since we skip for start days and then we see the results
+  ## only three days later, we see waste is start + 5
+  first_day <- config$start + 5
+  last_day <- nrow(pred_table) - 1
+  n <- last_day - first_day
+
+  remaining_inventory <- pred_table$`No. expiring in 1 day` + pred_table$`No. expiring in 2 days`
+  adj_remaining_inventory <- pred_table$`Adj. no. expiring in 1 day` + pred_table$`Adj. no. expiring in 2 days`
+
+  loss <- sum( pred_table$Waste[seq(first_day, last_day)]) +
+    sum(((pip::pos(config$penalty_factor - remaining_inventory))^2) [seq(first_day, last_day)])
+
+  adj_loss <- sum( pred_table$`Adj. waste`[seq(first_day, last_day)]) +
+    sum(((pip::pos(config$penalty_factor - adj_remaining_inventory))^2) [seq(first_day, last_day)])
+
+  list(`Avg. Daily Loss` = loss / n, `Adj. Avg. Daily Loss` = adj_loss / n)
+}
+
+#' Compute the true average daily loss based on actual inventory levels during the
+#' prediction period.
+#'
+#' The loss formula is given by the sum of the waste plus the sum of the squared positive
+#' difference between the desired inventory level and the remaining inventory, as per
+#' pip::build_model. This can be used to standardize and compare the efficacy of different
+#' models.
+#'
+#' @param pred_table, the prediction table generated from SBCpip::build_prediction_table
+#' @param config the site-specific configuration
+#' @return a list containing the true average daily loss
+#' @importFrom pip pos
+#' @export
+real_loss <- function(pred_table, config) {
+  first_day_waste_seen <- config$start + 5
+  last_day_waste_seen <- nrow(pred_table) - 1
+  n <- last_day_waste_seen - first_day_waste_seen
+
+  remaining_inventory <- pred_table$`Inv. count` +
+    pred_table$`Fresh Units Ordered` -
+    pred_table$`Platelet usage`
+
+  loss <- sum(pred_table$`True Waste`[seq(first_day_waste_seen, last_day_waste_seen)]) +
+    sum(((pip::pos(config$penalty_factor - remaining_inventory))^2) [seq(first_day_waste_seen, last_day_waste_seen)])
+
+  list(`Real Avg. Daily Loss` = loss / n)
 
 }
+
+#' Compute the RMSE of predicted vs. actual next-3-day product usage by day of week
+#'
+#' Note: Even though wastage minimization is the end-goal of the model (and not just
+#' usage prediction), this will help understand the effects of varying config hyperparameters
+#' such as c0 and penalty_factor. We can also explore the effects of varying the
+#' day(s) of week on which the model is updated, as well as the model_update_frequency.
+#'
+#' @param pred_table, the prediction table generated from SBCpip::build_prediction_table
+#' @param config the site-specific configuration
+#' @return a list containing the RMSE for next-3-day product usage by day of week
+#' @importFrom dplyr filter
+#' @importFrom magrittr %>%
+#' @export
+prediction_error <- function(pred_table, config) {
+
+  first_day <- pred_table$date[config$start + 5]
+  last_day <- pred_table$date[nrow(pred_table) - 3]
+
+  prediction_error <- list("Overall" = NA, "Sunday" = NA,
+                           "Monday" = NA, "Tuesday" = NA,
+                           "Wednesday" = NA, "Thursday" = NA,
+                           "Friday" = NA, "Saturday" = NA)
+
+  # Truncate the prediction table
+  pred_table_trunc <- pred_table %>%
+    dplyr::filter(date >= first_day) %>%
+    dplyr::filter(date <= last_day)
+
+  # Overall RMSE
+  n_all <- nrow(pred_table_trunc)
+  pred_rmse <- sqrt(sum((pred_table_trunc$`Three-day actual usage` - pred_table_trunc$`Three-day prediction`)^2) / n_all)
+  prediction_error[["Overall"]] <- pred_rmse
+
+  # RMSE by Day of Week
+  for (dow in c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")) {
+    pred_table_weekly <- pred_table_trunc %>% dplyr::filter(weekdays(date) == dow)
+    n <- nrow(pred_table_weekly)
+    pred_rmse <- sqrt(sum((pred_table_weekly$`Three-day actual usage` - pred_table_weekly$`Three-day prediction`)^2) / n)
+    prediction_error[[dow]] <- pred_rmse
+  }
+
+  prediction_error
+}
+
+#' Combine projection loss and prediction error calculation into a single evaluation.
+#'
+#' @param pred_table, the prediction table generated from SBCpip::build_prediction_table
+#' @param config the site-specific configuration
+#' @return a list containing a summary of the projection loss and prediction error (i.e.
+#'         the overall efficacy of the model)
+#' @export
+pred_table_analysis <- function(pred_table, config) {
+  list(pred_start = pred_table$date[config$start + 5],
+       pred_end = pred_table$date[nrow(pred_table) - 1],
+       num_days = nrow(pred_table) - config$start - 6, # effective number of days
+       proj_loss = projection_loss(pred_table, config),
+       real_loss = real_loss(pred_table, config),
+       three_day_pred_rmse = prediction_error(pred_table, config))
+}
+

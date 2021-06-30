@@ -894,9 +894,17 @@ predict_for_date <- function(config,
     transfusion <- tail(transfusion, config$history_window + 1 + 7)
 
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3b. Creating training/prediction dataset")
+
+    # define all variables (this allows mismatch between RDS columns and config)
+    cbc_names <- sapply(config$cbc_vars, function(x) paste0(x, "_Nq"))
+    all_vars <- c("date", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag",
+                  cbc_names, config$census_locations, "plt_used")
+
+
     dataset <- prev_data$dataset <- create_dataset(cbc_features = cbc_features,
                                                    census = census,
-                                                   transfusion = transfusion)
+                                                   transfusion = transfusion) %>% dplyr::select(all_vars)
+
     recent_data <- tail(dataset, n = config$history_window + 1)
     training_data <- head(recent_data, n = config$history_window)
     new_data <- tail(recent_data, n = 1)
