@@ -293,7 +293,7 @@ process_all_census_files <- function(data_folder,
 #' Read a single transfusion file data and return it, as is
 #' @param filename the fully qualified path of the file
 #' @return a list of four items, filename, raw_data (tibble), report a
-#'     list consisting of summary tibble, census_data (tibble)
+#'     list consisting of summary tibble, transfusion_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @export
 read_one_transfusion_file <- function(filename) {
@@ -376,7 +376,7 @@ summarize_and_clean_transfusion <- function(raw_data) {
 #' @param data_folder the folder containing the raw data
 #' @param report_folder the folder to write reports to, default is
 #'     data_folder with "_Reports" appended. Must exist.
-#' @param pattern the pattern to distinguish CBC files, default
+#' @param pattern the pattern to distinguish Transfusion files, default
 #'     "LAB-BB-CSRP-Transfused*" appearing anywhere
 #' @return a combined dataset
 #' @importFrom tools file_path_sans_ext
@@ -404,6 +404,134 @@ process_all_transfusion_files <- function(data_folder,
         dplyr::arrange(date)
 }
 
+#' Read a single surgery file data and return tibble and summary
+#' @param filename the fully qualified path of the file
+#' @return a list of four items, filename, raw_data (tibble), report a
+#'     list consisting of summary tibble, surgery_data (tibble)
+#' @importFrom readr cols col_integer col_character col_datetime read_tsv
+#' @export
+read_one_surgery_file <- function(filename) {
+
+    col_types <- list(
+        LOG_ID = readr::col_character(),
+        PAT_ID = readr::col_character(),
+        PAT_MRN_ID = readr::col_character(),
+        SURGEON_NAME = readr::col_character(),
+        OR_SERVICE = readr::col_character(),
+        ROOM_NAME = readr::col_character(),
+        SURGERY_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+        PROC1 = readr::col_character(),
+        PROC2 = readr::col_character(),
+        PROC3 = readr::col_character(),
+        FIRST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+        LAST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+        CASE_CLASS = readr::col_character(),
+        PARENT_HOSPITAL = readr::col_character()
+    )
+
+    loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing", basename(path = filename)))
+
+    raw_data <- readr::read_tsv(file = filename,
+                                col_names = TRUE,
+                                col_types = do.call(readr::cols, col_types),
+                                progress = FALSE)
+
+    #dates <- unique(sort(as.Date(raw_data$SURGERY_DATE)))
+
+    ## Stop if no data
+    if (nrow(raw_data) < 1) {
+        loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
+        stop(sprintf("No data in file %s", filename))
+    }
+    processed_data <- summarize_and_clean_surgery(raw_data)
+    if (processed_data$errorCode != 0) {
+        loggit::loggit(log_lvl = "ERROR", log_msg = processed_data$errorMessage)
+        stop(processed_data$errorMessage)
+    }
+    list(filename = filename,
+         raw_data = raw_data,
+         report = list(summary = processed_data$summary),
+         surgery_data = processed_data$data)
+}
+
+#' Summarize and clean the raw surgery data
+#' @param raw_data the raw data tibble
+#' @return a list of four items; errorCode (nonzero if error),
+#'     errorMessage if any, the summary data tibble, the data tibble
+#'     filtered with relevant columns for us
+#' @importFrom magrittr %>%
+#' @importFrom dplyr filter mutate select group_by summarize pivot_wider n left_join
+#' @importFrom rlang quo !! .data
+#' @export
+summarize_and_clean_surgery <- function(raw_data) {
+    result <- list(errorCode = 0,
+                   errorMessage = "")
+
+    if (any(is.na(raw_data$SURGERY_DATE))) {
+        result$errorCode <- 1
+        result$errorMessage <- "Bad Issue Date/Time column!"
+        return(result)
+    }
+
+    raw_data %>%
+        dplyr::filter(.data$PARENT_HOSPITAL == "Non-ValleyCare") %>% # Ignore Pleasanton
+        dplyr::mutate(date = as.Date(.data$SURGERY_DATE),
+                      case_class = .data$CASE_CLASS,
+                      or_service = .data$OR_SERVICE) %>%
+        dplyr::select(.data$date, .data$case_class, .data$or_service) -> filtered_data
+
+    # Look at counts for most common procedures
+    filtered_data %>%
+        # We will want to add service selection to the config settings - hard-coding for now.
+        dplyr::filter(.data$or_service %in% c("Gastroenterology", "Interventional Radiology", "Orthopedics",
+                                              "Neuroradiology", "Transplant", "Cardiac")) %>%
+        dplyr::group_by(.data$date, .data$or_service) %>%
+        dplyr::summarize(op_count = dplyr::n()) %>%
+        tidyr::pivot_wider(names_from = .data$or_service, values_from = .data$op_count, values_fill = 0) -> proc_data
+
+    # Look at number of urgent procedures
+    filtered_data %>%
+        dplyr::filter(.data$case_class == "Urgent") %>%
+        dplyr::group_by(.data$date) %>%
+        dplyr::summarize(urgent_count = dplyr::n()) ->
+        urgent_count
+
+    proc_data %>% dplyr::left_join(urgent_count) -> result$data -> result$summary
+
+    result
+}
+
+#' Process all surgery files in a folder and generate qc reports
+#' @param data_folder the folder containing the raw data
+#' @param report_folder the folder to write reports to, default is
+#'     data_folder with "_Reports" appended. Must exist.
+#' @param pattern the pattern to distinguish surgery files, default
+#'     "LAB-BB-CSRP-Surgery*" appearing anywhere
+#' @return a combined dataset
+#' @importFrom tools file_path_sans_ext
+#' @importFrom tidyr replace_na
+#' @importFrom writexl write_xlsx
+#' @export
+process_all_surgery_files <- function(data_folder,
+                                      report_folder = file.path(dirname(data_folder),
+                                                                paste0(basename(data_folder),
+                                                                       "_Reports")),
+                                      pattern = "LAB-BB-CSRP-Surgery*") {
+    fileList <- list.files(data_folder, pattern = pattern , full.names = TRUE)
+    names(fileList) <- basename(fileList)
+    raw_surgery <- lapply(fileList, read_one_surgery_file)
+
+    for (item in raw_surgery) {
+        save_report_file(report_tbl = item$report,
+                         report_folder = report_folder,
+                         filename = item$filename)
+    }
+
+    Reduce(f = rbind,
+           lapply(raw_surgery, function(x) x$surgery_data)) %>%
+        dplyr::distinct() %>%
+        dplyr::arrange(date) %>% replace(., is.na(.), 0)
+}
 
 #' Construct a tibble containing the quartiles of the CBC values and lagged features
 #' @param cbc the cbc data tibble
@@ -601,9 +729,11 @@ process_data_for_date <- function(config,
     cbc_file <- list.files(path = config$data_folder,
                            pattern = sprintf(config$cbc_filename_prefix, date),
                            full.names = TRUE)
+
     census_file <- list.files(path = config$data_folder,
                               pattern = sprintf(config$census_filename_prefix, date),
                               full.names = TRUE)
+
     transfusion_file <- list.files(path = config$data_folder,
                                    pattern = sprintf(config$transfusion_filename_prefix, date),
                                    full.names = TRUE)
@@ -868,15 +998,18 @@ predict_for_date <- function(config,
     ## Update prev_data with increment along with the model_age
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3. Adding new increment to previous data")
     date_diff <- as.integer(as.Date(date) - as.Date(prev_day))
+
     ## For cbc, we don't need to do anything for data for previous dates since the summarization
     ## of cbc_features will automatically handle those dates.
     cbc <- prev_data$cbc <- dplyr::bind_rows(prev_data$cbc, result$cbc)
+
     ## For census, we need to add any new data for previous dates, using sum
     dplyr::bind_rows(prev_data$census, result$census) %>%
         dplyr::group_by(date) %>%
             dplyr::summarize_all(sum) ->
             census ->
             prev_data$census
+
     ## For transfusion, we need to add any new data for previous dates, using sum
     dplyr::bind_rows(prev_data$transfusion, result$transfusion) %>%
         dplyr::group_by(date) %>%
@@ -887,7 +1020,8 @@ predict_for_date <- function(config,
     prev_data$inventory <- inventory <- dplyr::bind_rows(prev_data$inventory, result$inventory)
 
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3a. Creating CBC features")
-    ## Create dataset.  SHOULD THIS BE ONLY ON THE WINDOW DATA???? Also is the +1 correct?
+
+    ## Create dataset.
     cbc_features <- tail(create_cbc_features(cbc = cbc, cbc_quantiles = config$cbc_quantiles),
                          config$history_window + 1 + 7)
     census <- tail(census, config$history_window + 1 + 7)
