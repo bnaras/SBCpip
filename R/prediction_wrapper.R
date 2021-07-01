@@ -45,8 +45,8 @@ sbc_build_and_save_seed_data <- function(pred_start_date, config) {
 #' @importFrom loggit loggit
 #' @export
 sbc_predict_for_range <- function(pred_start_date, num_days, config) {
+  pred_end_date <- pred_start_date + num_days
   all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1)
-  all_pred_dates
   prediction_df <- NULL
   for (i in seq_along(all_pred_dates)) {
     date_str <- as.character(all_pred_dates[i])

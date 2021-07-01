@@ -76,6 +76,7 @@ summarize_and_clean_cbc <- function(raw_data, cbc_abnormals, cbc_vars) {
     result <- list(errorCode = 0,
                    errorMessage = "")
     raw_data %>%
+        dplyr::distinct(.keep_all = TRUE) %>%  # KO safeguard
         dplyr::filter(.data$BASE_NAME %in% cbc_vars) %>%
         dplyr::mutate(CBC_VALUE = as.numeric(gsub("^<0.1", "0", .data$ORD_VALUE))) %>%
         dplyr::mutate(RESULT_DATE = as.Date(.data$RESULT_TIME)) %>%
@@ -224,6 +225,7 @@ summarize_and_clean_census <- function(raw_data, locations) {
     }
 
     raw_data %>%
+        dplyr::distinct(.keep_all = TRUE) %>% # KO safeguard
         dplyr::mutate(LOCATION_DT = as.Date(.data$LOCATION_DT)) %>%
         dplyr::group_by(.data$LOCATION_DT, .data$LOCATION_NAME) %>%
         dplyr::summarize(count = dplyr::n()) %>%
@@ -264,7 +266,7 @@ summarize_and_clean_census <- function(raw_data, locations) {
 #' @importFrom writexl write_xlsx
 #' @export
 process_all_census_files <- function(data_folder,
-                                  report_folder = file.path(dirname(data_folder),
+                                     report_folder = file.path(dirname(data_folder),
                                                             paste0(basename(data_folder),
                                                                    "_Reports")),
                                      locations,
@@ -321,7 +323,7 @@ read_one_transfusion_file <- function(filename) {
                                 col_names = TRUE,
                                 col_types = do.call(readr::cols, col_types),
                                 progress = FALSE)
-    dates <- unique(sort(as.Date(raw_data$`Issue Date/Time`)))
+    #dates <- unique(sort(as.Date(raw_data$`Issue Date/Time`)))
 
     ## Stop if no data
     if (nrow(raw_data) < 1) {
@@ -360,6 +362,7 @@ summarize_and_clean_transfusion <- function(raw_data) {
     }
 
     raw_data %>%
+        dplyr::distinct(.keep_all = TRUE) %>% # KO safeguard
         dplyr::filter(.data$Type == "PLT") %>%
         dplyr::mutate(date = as.Date(.data$`Issue Date/Time`)) %>%
         dplyr::select(.data$date) %>%
@@ -406,11 +409,12 @@ process_all_transfusion_files <- function(data_folder,
 
 #' Read a single surgery file data and return tibble and summary
 #' @param filename the fully qualified path of the file
+#' @param services the list of surgery types considered as features
 #' @return a list of four items, filename, raw_data (tibble), report a
 #'     list consisting of summary tibble, surgery_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @export
-read_one_surgery_file <- function(filename) {
+read_one_surgery_file <- function(filename, services) {
 
     col_types <- list(
         LOG_ID = readr::col_character(),
@@ -443,7 +447,7 @@ read_one_surgery_file <- function(filename) {
         loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
         stop(sprintf("No data in file %s", filename))
     }
-    processed_data <- summarize_and_clean_surgery(raw_data)
+    processed_data <- summarize_and_clean_surgery(raw_data, services)
     if (processed_data$errorCode != 0) {
         loggit::loggit(log_lvl = "ERROR", log_msg = processed_data$errorMessage)
         stop(processed_data$errorMessage)
@@ -456,6 +460,7 @@ read_one_surgery_file <- function(filename) {
 
 #' Summarize and clean the raw surgery data
 #' @param raw_data the raw data tibble
+#' @param services the list of surgery types considered as features
 #' @return a list of four items; errorCode (nonzero if error),
 #'     errorMessage if any, the summary data tibble, the data tibble
 #'     filtered with relevant columns for us
@@ -463,7 +468,7 @@ read_one_surgery_file <- function(filename) {
 #' @importFrom dplyr filter mutate select group_by summarize pivot_wider n left_join
 #' @importFrom rlang quo !! .data
 #' @export
-summarize_and_clean_surgery <- function(raw_data) {
+summarize_and_clean_surgery <- function(raw_data, services) {
     result <- list(errorCode = 0,
                    errorMessage = "")
 
@@ -473,7 +478,9 @@ summarize_and_clean_surgery <- function(raw_data) {
         return(result)
     }
 
+    # Update this section depending on which features are deemed significant
     raw_data %>%
+        dplyr::distinct(.data$LOG_ID, .keep_all = TRUE) %>% # There are many repeated log IDs
         dplyr::filter(.data$PARENT_HOSPITAL == "Non-ValleyCare") %>% # Ignore Pleasanton
         dplyr::mutate(date = as.Date(.data$SURGERY_DATE),
                       case_class = .data$CASE_CLASS,
@@ -482,9 +489,7 @@ summarize_and_clean_surgery <- function(raw_data) {
 
     # Look at counts for most common procedures
     filtered_data %>%
-        # We will want to add service selection to the config settings - hard-coding for now.
-        dplyr::filter(.data$or_service %in% c("Gastroenterology", "Interventional Radiology", "Orthopedics",
-                                              "Neuroradiology", "Transplant", "Cardiac")) %>%
+        dplyr::filter(.data$or_service %in% services) %>%
         dplyr::group_by(.data$date, .data$or_service) %>%
         dplyr::summarize(op_count = dplyr::n()) %>%
         tidyr::pivot_wider(names_from = .data$or_service, values_from = .data$op_count, values_fill = 0) -> proc_data
@@ -513,13 +518,14 @@ summarize_and_clean_surgery <- function(raw_data) {
 #' @importFrom writexl write_xlsx
 #' @export
 process_all_surgery_files <- function(data_folder,
+                                      services,
                                       report_folder = file.path(dirname(data_folder),
                                                                 paste0(basename(data_folder),
                                                                        "_Reports")),
                                       pattern = "LAB-BB-CSRP-Surgery*") {
     fileList <- list.files(data_folder, pattern = pattern , full.names = TRUE)
     names(fileList) <- basename(fileList)
-    raw_surgery <- lapply(fileList, read_one_surgery_file)
+    raw_surgery <- lapply(fileList, read_one_surgery_file, services = services)
 
     for (item in raw_surgery) {
         save_report_file(report_tbl = item$report,
@@ -885,6 +891,7 @@ summarize_and_clean_inventory <- function(raw_data, date) {
     ## the filtering of PLT records automatically cleans them up.
 
     raw_data %>%
+        dplyr::distinct(.keep_all = TRUE) %>%
         dplyr::filter(.data$Type == "PLT") %>%
         dplyr::mutate(Days_To_Expiry = .data$`Days to Expire`) %>%
         dplyr::mutate(Already_Expired = (.data$Days_To_Expiry <= 0)) %>%

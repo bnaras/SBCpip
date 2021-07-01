@@ -28,11 +28,12 @@ SBC_config <- function() {
             'WBC' = function(x) x > 10.3,   ## K/muL
             'HCT' = function(x) x < 34 ## NARAS ADDED THIS!!
         ),
-        census_locations = c("FGR", "E2-ICU", "C3", "E3",  "B3", "B2", "F3", 
+        census_locations = c("FGR", "E2-ICU", "C3", "E3",  "B3", "B2", "F3",
                              "C2", "E1", "B1", "H2", "VCP 3 WEST",
-                             "VCP 2 WEST", "VCP 1 WEST", "VCL SKILLED NURSING FACILITY", 
+                             "VCP 2 WEST", "VCP 1 WEST", "VCL SKILLED NURSING FACILITY",
                              "G2P", "G2S", "C1", "J2", "J4", "J5", "J6", "J7", "M5", "M6", "M7"), # (KO) Need to make this more dynamic
-
+        surgery_services = c("Gastroenterology", "Interventional Radiology", "Orthopedics",
+                             "Neuroradiology", "Transplant", "Cardiac"), # Counts of types of surgeries conducted (OR_SERVICE)
         c0 = 15, ## value for c0 to use in training model
         min_inventory = 30, ## the minimum inventory
         history_window = 200,  ## how many days to use in training
@@ -45,6 +46,7 @@ SBC_config <- function() {
         census_filename_prefix = "LAB-BB-CSRP-Census_Daily%s-",
         transfusion_filename_prefix = "LAB-BB-CSRP-Transfused Product Report_Daily%s-",
         inventory_filename_prefix = "Daily_Product_Inventory_Report_Morning_To_Folder%s-",
+        surgery_filename_prefix = "LAB-BB-CSRP-Surgery_Daily%s-",
         output_filename_prefix = "pip-output-%s.RDS",
         log_filename_prefix = "SBCpip_%s.json",
         model_update_frequency = 7L ## every 7 days
