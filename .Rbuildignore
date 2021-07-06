@@ -11,3 +11,5 @@
 ^CRAN-RELEASE$
 ^inst/misc
 ^inst/doc$
+^doc$
+^Meta$

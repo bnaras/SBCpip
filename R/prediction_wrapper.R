@@ -10,11 +10,11 @@
 #' @importFrom magrittr %<>%
 #' @export
 sbc_build_and_save_seed_data <- function(pred_start_date, config) {
-
+  
   seed_start_date <- pred_start_date - config$history_window - 1L
   seed_end_date <- pred_start_date - 1L
   all_seed_dates <- seq.Date(from = seed_start_date, to = seed_end_date, by = 1L)
-
+  
   seed_data <- list(cbc = NULL, census = NULL, transfusion = NULL, inventory = NULL)
   for (i in seq_along(all_seed_dates)) {
     date_str <- as.character(all_seed_dates[i])
@@ -24,7 +24,7 @@ sbc_build_and_save_seed_data <- function(pred_start_date, config) {
     seed_data$transfusion %<>% rbind(data_single_day$transfusion)
     seed_data$inventory %<>% rbind(data_single_day$inventory)
   }
-
+  
   # Save the seed dataset
   saveRDS(object = seed_data,
           file = file.path(config$output_folder,
@@ -72,18 +72,18 @@ sbc_predict_for_range <- function(pred_start_date, num_days, config) {
 #' @export
 get_coefs_over_time <- function(pred_start_date, num_days, config) {
   # Collect model coefficients over all output files (only need one set per week)
-
+  
   model_coefs <- NULL
   pred_end_date <- pred_start_date + num_days
   all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1L)
-
+  
   # Read model coefs according to cadence of output frequency
   for (i in seq_along(all_pred_dates)) {
     date <- all_pred_dates[i]
     output_file <- list.files(path = config$output_folder,
-               pattern = sprintf(config$output_filename_prefix, date),
-               full.names = TRUE)
-
+                              pattern = sprintf(config$output_filename_prefix, date),
+                              full.names = TRUE)
+    
     if (length(output_file) == 0L) {
       print(paste0("No output files generated for date ", date))
     }
@@ -117,7 +117,7 @@ generate_full_dataset <- function(pred_start_date, num_days, config) {
   pred_end_date <- pred_start_date + num_days
   pred_inputs <- list(cbc = NULL, census = NULL, transfusion = NULL, inventory = NULL)
   all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1L)
-
+  
   for (i in seq_along(all_pred_dates)) {
     date_str <- as.character(all_pred_dates[i])
     inputs_single_day <- process_data_for_date(config = config, date = date_str)
@@ -126,7 +126,7 @@ generate_full_dataset <- function(pred_start_date, num_days, config) {
     pred_inputs$transfusion %<>% rbind(inputs_single_day$transfusion)
     pred_inputs$inventory %<>% rbind(inputs_single_day$inventory)
   }
-
+  
   full_dataset <- create_cbc_features(pred_inputs$cbc, config$cbc_quantiles)
   pred_inputs$inventory$date %<>% as.Date()
   full_dataset %>%
@@ -134,11 +134,11 @@ generate_full_dataset <- function(pred_start_date, num_days, config) {
     dplyr::left_join(pred_inputs$transfusion, by="date") %>%
     dplyr::left_join(pred_inputs$inventory, by="date") %>%
     dplyr::mutate(dow = weekdays(date)) -> full_dataset
-
+  
   full_dataset %>% distinct() %>%
     dplyr::rename(plt_used = .data$used) %>%
     dplyr::mutate(lag = ma(.data$plt_used, window_size = 7L)) -> full_dataset
-
+  
   full_dataset
 }
 
@@ -148,20 +148,20 @@ generate_full_dataset <- function(pred_start_date, num_days, config) {
 #' @param pred_table, the prediction table generated from SBCpip::build_prediction_table
 #'
 #' @importFrom dplyr filter
-#' @importFrom ggplot2 ggplot geom_line
+#' @importFrom ggplot2 ggplot geom_line aes
 #' @importFrom magrittr %>%
 #' @export
 plot_pred_vs_true_usage <- function(pred_table) {
-
+  
   first_day <- pred_table$date[1L]
   last_day <- pred_table$date[nrow(pred_table) - 3L] # predictions end 3 days early
   pred_table_trunc <- pred_table %>%
     dplyr::filter(date >= first_day) %>%
     dplyr::filter(date < last_day)
-
+  
   ggplot2::ggplot(data=pred_table_trunc) +
-    ggplot2::geom_line(aes(x=date, y=`Three-day actual usage`)) +
-    ggplot2::geom_line(aes(x=date, y=`Three-day prediction`))
+    ggplot2::geom_line(ggplot2::aes(x=date, y=`Three-day actual usage`)) +
+    ggplot2::geom_line(ggplot2::aes(x=date, y=`Three-day prediction`))
 }
 
 #' Compute the loss value on a validation or test dataset from the original
@@ -183,16 +183,16 @@ projection_loss <- function(pred_table, config) {
   first_day <- config$start + 5L
   last_day <- nrow(pred_table) - 1L
   n <- last_day - first_day
-
+  
   remaining_inventory <- pred_table$`No. expiring in 1 day` + pred_table$`No. expiring in 2 days`
   adj_remaining_inventory <- pred_table$`Adj. no. expiring in 1 day` + pred_table$`Adj. no. expiring in 2 days`
-
+  
   loss <- sum( pred_table$Waste[seq(first_day, last_day)]) +
     sum(((pip::pos(config$penalty_factor - remaining_inventory))^2) [seq(first_day, last_day)])
-
+  
   adj_loss <- sum( pred_table$`Adj. waste`[seq(first_day, last_day)]) +
     sum(((pip::pos(config$penalty_factor - adj_remaining_inventory))^2) [seq(first_day, last_day)])
-
+  
   list(`Avg. Daily Loss` = loss / n, `Adj. Avg. Daily Loss` = adj_loss / n)
 }
 
@@ -213,16 +213,16 @@ real_loss <- function(pred_table, config) {
   first_day_waste_seen <- config$start + 5L
   last_day_waste_seen <- nrow(pred_table) - 1L
   n <- last_day_waste_seen - first_day_waste_seen
-
+  
   remaining_inventory <- pred_table$`Inv. count` +
     pred_table$`Fresh Units Ordered` -
     pred_table$`Platelet usage`
-
+  
   loss <- sum(pred_table$`True Waste`[seq(first_day_waste_seen, last_day_waste_seen)]) +
     sum(((pip::pos(config$penalty_factor - remaining_inventory))^2) [seq(first_day_waste_seen, last_day_waste_seen)])
-
+  
   list(`Real Avg. Daily Loss` = loss / n)
-
+  
 }
 
 #' Compute the RMSE of predicted vs. actual next-3-day product usage by day of week
@@ -239,25 +239,25 @@ real_loss <- function(pred_table, config) {
 #' @importFrom magrittr %>%
 #' @export
 prediction_error <- function(pred_table, config) {
-
+  
   first_day <- pred_table$date[config$start + 5L]
   last_day <- pred_table$date[nrow(pred_table) - 3L]
-
+  
   prediction_error <- list("Overall" = NA, "Sunday" = NA,
                            "Monday" = NA, "Tuesday" = NA,
                            "Wednesday" = NA, "Thursday" = NA,
                            "Friday" = NA, "Saturday" = NA)
-
+  
   # Truncate the prediction table
   pred_table_trunc <- pred_table %>%
     dplyr::filter(date >= first_day) %>%
     dplyr::filter(date <= last_day)
-
+  
   # Overall RMSE
   n_all <- nrow(pred_table_trunc)
   pred_rmse <- sqrt(sum((pred_table_trunc$`Three-day actual usage` - pred_table_trunc$`Three-day prediction`)^2) / n_all)
   prediction_error[["Overall"]] <- pred_rmse
-
+  
   # RMSE by Day of Week
   for (dow in c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")) {
     pred_table_weekly <- pred_table_trunc %>% dplyr::filter(weekdays(date) == dow)
@@ -265,7 +265,7 @@ prediction_error <- function(pred_table, config) {
     pred_rmse <- sqrt(sum((pred_table_weekly$`Three-day actual usage` - pred_table_weekly$`Three-day prediction`)^2) / n)
     prediction_error[[dow]] <- pred_rmse
   }
-
+  
   prediction_error
 }
 
@@ -284,4 +284,3 @@ pred_table_analysis <- function(pred_table, config) {
        real_loss = real_loss(pred_table, config),
        three_day_pred_rmse = prediction_error(pred_table, config))
 }
-

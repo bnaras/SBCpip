@@ -29,7 +29,7 @@ Depends: R (>= 3.4.2)
 License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
-Suggests: knitr
+Suggests: knitr, rmarkdown
 Imports: dplyr, readr, readxl, writexl, magrittr, tidyselect,
         lubridate, tidyverse, tibble, ggExtra, shiny, shinydashboard,
         stringr, tidyr, rlang, pip, loggit, jsonlite, bibtex

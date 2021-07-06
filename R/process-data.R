@@ -1177,7 +1177,7 @@ get_prediction_and_usage <- function(config, start_date, end_date) {
 #'     inventory columns if available
 #' @importFrom magrittr %>%
 #' @importFrom rlang .data
-#' @importFrom dplyr select left_join
+#' @importFrom dplyr select left_join lead
 #' @importFrom tibble as_tibble
 #' @export
 build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2, generate_report = TRUE,
@@ -1269,7 +1269,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
         inventory
 
     tibble::as_tibble(cbind(prediction_df, pred_mat[seq_len(N), ])) %>%
-        dplyr::mutate(t_true = lead(plt_used, 1) + lead(plt_used, 2) + lead(plt_used, 3)
+        dplyr::mutate(t_true = dplyr::lead(plt_used, 1) + dplyr::lead(plt_used, 2) + dplyr::lead(plt_used, 3)
                       ) %>%
         dplyr::relocate(t_true, .after = plt_used) %>%
         dplyr::left_join(inventory, by = "date") ->
