@@ -4,9 +4,14 @@
 \alias{build_prediction_table}
 \title{Given the configuration and prediction data frame, build a prediction table}
 \usage{
-build_prediction_table(config, start_date, end_date = Sys.Date() + 2,
-  generate_report = TRUE, offset = config$start - 1,
-  min_inventory = config$min_inventory)
+build_prediction_table(
+  config,
+  start_date,
+  end_date = Sys.Date() + 2,
+  generate_report = TRUE,
+  offset = config$start - 1,
+  min_inventory = config$min_inventory
+)
 }
 \arguments{
 \item{config}{the site configuration}

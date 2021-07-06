@@ -4,10 +4,12 @@
 \alias{process_all_transfusion_files}
 \title{Process all transfusion files in a folder and generate qc reports}
 \usage{
-process_all_transfusion_files(data_folder,
-  report_folder = file.path(dirname(data_folder),
-  paste0(basename(data_folder), "_Reports")),
-  pattern = "LAB-BB-CSRP-Transfused*")
+process_all_transfusion_files(
+  data_folder,
+  report_folder = file.path(dirname(data_folder), paste0(basename(data_folder),
+    "_Reports")),
+  pattern = "LAB-BB-CSRP-Transfused*"
+)
 }
 \arguments{
 \item{data_folder}{the folder containing the raw data}
@@ -15,7 +17,7 @@ process_all_transfusion_files(data_folder,
 \item{report_folder}{the folder to write reports to, default is
 data_folder with "_Reports" appended. Must exist.}
 
-\item{pattern}{the pattern to distinguish CBC files, default
+\item{pattern}{the pattern to distinguish Transfusion files, default
 "LAB-BB-CSRP-Transfused*" appearing anywhere}
 }
 \value{

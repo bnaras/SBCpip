@@ -11,7 +11,7 @@ read_one_transfusion_file(filename)
 }
 \value{
 a list of four items, filename, raw_data (tibble), report a
-    list consisting of summary tibble, census_data (tibble)
+    list consisting of summary tibble, transfusion_data (tibble)
 }
 \description{
 Read a single transfusion file data and return it, as is

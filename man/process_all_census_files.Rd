@@ -4,10 +4,13 @@
 \alias{process_all_census_files}
 \title{Process all census files in a folder and generate qc reports}
 \usage{
-process_all_census_files(data_folder,
-  report_folder = file.path(dirname(data_folder),
-  paste0(basename(data_folder), "_Reports")), locations,
-  pattern = "LAB-BB-CSRP-Census*")
+process_all_census_files(
+  data_folder,
+  report_folder = file.path(dirname(data_folder), paste0(basename(data_folder),
+    "_Reports")),
+  locations,
+  pattern = "LAB-BB-CSRP-Census*"
+)
 }
 \arguments{
 \item{data_folder}{the folder containing the raw data}

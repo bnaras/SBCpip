@@ -4,10 +4,14 @@
 \alias{process_all_cbc_files}
 \title{Process all cbc files in a folder and generate qc reports}
 \usage{
-process_all_cbc_files(data_folder,
-  report_folder = file.path(dirname(data_folder),
-  paste0(basename(data_folder), "_Reports")), cbc_abnormals, cbc_vars,
-  pattern = "LAB-BB-CSRP-CBC*")
+process_all_cbc_files(
+  data_folder,
+  report_folder = file.path(dirname(data_folder), paste0(basename(data_folder),
+    "_Reports")),
+  cbc_abnormals,
+  cbc_vars,
+  pattern = "LAB-BB-CSRP-CBC*"
+)
 }
 \arguments{
 \item{data_folder}{the folder containing the raw data}

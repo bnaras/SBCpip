@@ -464,8 +464,8 @@ read_one_surgery_file <- function(filename, services) {
 #' @return a list of four items; errorCode (nonzero if error),
 #'     errorMessage if any, the summary data tibble, the data tibble
 #'     filtered with relevant columns for us
-#' @importFrom magrittr %>%
-#' @importFrom dplyr filter mutate select group_by summarize pivot_wider n left_join
+#' @importFrom dplyr filter mutate select group_by summarize n left_join
+#' @importFrom tidyr pivot_wider
 #' @importFrom rlang quo !! .data
 #' @export
 summarize_and_clean_surgery <- function(raw_data, services) {
@@ -642,10 +642,7 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
 create_dataset <- function(cbc_features, census, transfusion) {
     transfusion %>%
         dplyr::rename(plt_used = .data$used) %>%
-        #dplyr::mutate(seven_lag = ma(.data$plt_used, window_size = 7L)) %>%
-        #dplyr::mutate(four_lag = ma(.data$plt_used, window_size = 4L)) %>%
         dplyr::mutate(lag = ma(.data$plt_used, window_size = 7L)) %>%
-        ## dplyr::mutate(plt_used = c(plt_used[-1], NA)) %>%  ## Not necessary because things are aligned already
         dplyr::inner_join({
             cbc_features %>%
                 smooth_cbc_features(window_size = 7L) %>%
@@ -676,7 +673,6 @@ create_dataset <- function(cbc_features, census, transfusion) {
 #' @importFrom tibble as_tibble
 #' @export
 scale_dataset <- function(dataset, center = NULL, scale = NULL) {
-    print(dataset)
 
     dataset %>%
         dplyr::select(-.data$date, -.data$plt_used) ->
@@ -692,7 +688,8 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
         scale_info <- attributes(scaled_data)
         return(list(scaled_data = tibble::as_tibble(data.frame(date = dataset$date,
                                                                scaled_data,
-                                                               plt_used = dataset$plt_used)),
+                                                               plt_used = dataset$plt_used,
+                                                               check.names = FALSE)),
                     center = scale_info$`scaled:center`,
                     scale = scale_info$`scaled:scale`))
     }
@@ -706,7 +703,8 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
 
     list(scaled_data = tibble::as_tibble(data.frame(date = dataset$date,
                                                     scaled_data,
-                                                    plt_used = dataset$plt_used)),
+                                                    plt_used = dataset$plt_used,
+                                                    check.names = FALSE)),
          center = center,
          scale = scale)
 }
@@ -984,19 +982,19 @@ predict_for_date <- function(config,
     ## for a repeated date during grouping
     multiple_dates_in_increment <- FALSE
     unique_cbc_dates <- unique(result$cbc$date)
-    if (length(unique_cbc_dates) > 1) {
+    if (length(unique_cbc_dates) > 1L) {
         loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in cbc file, model retraining forced!")
         loggit::loggit(log_lvl = "WARN", log_msg = unique_cbc_dates)
         multiple_dates_in_increment <- TRUE
     }
     unique_census_dates <- unique(result$census$date)
-    if (length(unique_census_dates) > 1) {
+    if (length(unique_census_dates) > 1L) {
         loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in census file, model retraining forced!")
         loggit::loggit(log_lvl = "WARN", log_msg = unique_census_dates)
         multiple_dates_in_increment <- TRUE
     }
     unique_transfusion_dates <- unique(result$transfusion$date)
-    if (length(unique_transfusion_dates) > 1) {
+    if (length(unique_transfusion_dates) > 1L) {
         loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in transfusion file, model retraining forced!")
         loggit::loggit(log_lvl = "WARN", log_msg = unique_transfusion_dates)
         multiple_dates_in_increment <- TRUE
@@ -1030,9 +1028,9 @@ predict_for_date <- function(config,
 
     ## Create dataset.
     cbc_features <- tail(create_cbc_features(cbc = cbc, cbc_quantiles = config$cbc_quantiles),
-                         config$history_window + 1 + 7)
-    census <- tail(census, config$history_window + 1 + 7)
-    transfusion <- tail(transfusion, config$history_window + 1 + 7)
+                         config$history_window + 1L + 7L)
+    census <- tail(census, config$history_window + 1L + 7L)
+    transfusion <- tail(transfusion, config$history_window + 1L + 7L)
 
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3b. Creating training/prediction dataset")
 
@@ -1046,9 +1044,9 @@ predict_for_date <- function(config,
                                                    census = census,
                                                    transfusion = transfusion) %>% dplyr::select(all_vars)
 
-    recent_data <- tail(dataset, n = config$history_window + 1)
+    recent_data <- tail(dataset, n = config$history_window + 1L)
     training_data <- head(recent_data, n = config$history_window)
-    new_data <- tail(recent_data, n = 1)
+    new_data <- tail(recent_data, n = 1L)
 
     ## If it is time to update the model, do so
     ## One way that can happen...
@@ -1057,7 +1055,7 @@ predict_for_date <- function(config,
     model_needs_updating <- (multiple_dates_in_increment ||
                              is.null(prev_data$model_age) ||
                              model_changed ||
-                             (prev_data$model_age %% config$model_update_frequency == 0) ||
+                             (prev_data$model_age %% config$model_update_frequency == 0L) ||
                              (date_diff > config$model_update_frequency))
     if (model_needs_updating) {
         ## Provide informative log
@@ -1075,7 +1073,7 @@ predict_for_date <- function(config,
         prev_data$scaled_dataset <- scaled_dataset <- scale_dataset(training_data) # center and scale are NULL
 
         # ensure that no NA values are fed into build_model
-        data <- as.data.frame(scaled_dataset$scaled_data)
+        data <- as.data.frame(scaled_dataset$scaled_data, optional=TRUE)
         if (sum(is.na(data)) > 0) {
             data[is.na(data)] <- 0
             loggit::loggit(log_lvl = "WARN", log_msg ='Warning: NA values found in scaled dataset - replacing with 0')
@@ -1102,9 +1100,9 @@ predict_for_date <- function(config,
     new_scaled_data <- scale_dataset(new_data,
                                      center = scaled_dataset$center,
                                      scale = scaled_dataset$scale)$scaled_data
+    
     prediction <- pip::predict_three_day_sum(model = prev_data$model,
-                                             new_data = as.data.frame(new_scaled_data)) ## last row is what we  want to predict for
-
+                                             new_data = as.data.frame(new_scaled_data, optional=TRUE)) ## last row is what we  want to predict for
     # Make sure prediction is returning a valid response. No point in continuing otherwise.
     if (is.nan(prediction)) {
         stop(sprintf("Next three day prediction returned NaN for %s", date))
@@ -1144,12 +1142,12 @@ predict_for_date <- function(config,
 #' @importFrom dplyr select left_join
 #' @export
 get_prediction_and_usage <- function(config, start_date, end_date) {
-    dates <- seq.Date(from = start_date, to = end_date, by = 1)
+    dates <- seq.Date(from = start_date, to = end_date, by = 1L)
     output_files <- list.files(path = config$output_folder,
                                pattern = paste0("^",
                                                 substring(config$output_filename_prefix, first = 1, last = 10)),
                                full.names = TRUE)
-    d <- readRDS(tail(output_files, 1))
+    d <- readRDS(tail(output_files, 1L))
     d$dataset %>%
         dplyr::select(.data$date, .data$plt_used) ->
         d2
@@ -1194,7 +1192,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     if (length(output_files) == 0) {
         stop(sprintf("No output file found for the prediction end date: %s", as.character(end_date)))
     }
-    d <- readRDS(tail(output_files, 1))
+    d <- readRDS(tail(output_files, 1L))
 
     #d$dataset %>%
     #    dplyr::select(.data$date, .data$plt_used) ->
@@ -1313,7 +1311,6 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
                          report_folder = config$report_folder,
                          filename = filename)
     }
-    print(pred_table)
 
     pred_table
 }

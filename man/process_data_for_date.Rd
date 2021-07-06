@@ -4,8 +4,10 @@
 \alias{process_data_for_date}
 \title{Process data for a particular date by reading files per configuration and date}
 \usage{
-process_data_for_date(config, date = as.character(Sys.Date(), format =
-  "\%Y-\%m-\%d"))
+process_data_for_date(
+  config,
+  date = as.character(Sys.Date(), format = "\%Y-\%m-\%d")
+)
 }
 \arguments{
 \item{config}{a site-specific configuration list}

@@ -11,9 +11,9 @@
 #' @export
 sbc_build_and_save_seed_data <- function(pred_start_date, config) {
 
-  seed_start_date <- pred_start_date - config$history_window - 1
-  seed_end_date <- pred_start_date - 1
-  all_seed_dates <- seq.Date(from = seed_start_date, to = seed_end_date, by = 1)
+  seed_start_date <- pred_start_date - config$history_window - 1L
+  seed_end_date <- pred_start_date - 1L
+  all_seed_dates <- seq.Date(from = seed_start_date, to = seed_end_date, by = 1L)
 
   seed_data <- list(cbc = NULL, census = NULL, transfusion = NULL, inventory = NULL)
   for (i in seq_along(all_seed_dates)) {
@@ -45,8 +45,10 @@ sbc_build_and_save_seed_data <- function(pred_start_date, config) {
 #' @importFrom loggit loggit
 #' @export
 sbc_predict_for_range <- function(pred_start_date, num_days, config) {
+  
   pred_end_date <- pred_start_date + num_days
-  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1)
+  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1L)
+  
   prediction_df <- NULL
   for (i in seq_along(all_pred_dates)) {
     date_str <- as.character(all_pred_dates[i])
@@ -73,16 +75,16 @@ get_coefs_over_time <- function(pred_start_date, num_days, config) {
 
   model_coefs <- NULL
   pred_end_date <- pred_start_date + num_days
-  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by=1)
+  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1L)
 
   # Read model coefs according to cadence of output frequency
-  for (i in seq(1, num_days, config$model_update_frequency)) {
+  for (i in seq_along(all_pred_dates)) {
     date <- all_pred_dates[i]
     output_file <- list.files(path = config$output_folder,
                pattern = sprintf(config$output_filename_prefix, date),
                full.names = TRUE)
 
-    if (length(output_file) == 0) {
+    if (length(output_file) == 0L) {
       print(paste0("No output files generated for date ", date))
     }
     else {
@@ -91,9 +93,8 @@ get_coefs_over_time <- function(pred_start_date, num_days, config) {
       print(paste("Added model coefs for day", i))
     }
   }
-  coef.tbl <- as_tibble(model_coefs)
-  all_coef_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 7)
-  coef.tbl$date = all_coef_dates
+  coef.tbl <- tibble::as_tibble(model_coefs)
+  coef.tbl$date <- all_pred_dates
   coef.tbl %>% dplyr::relocate(date) -> coef.tbl
   coef.tbl
 }
@@ -115,7 +116,7 @@ get_coefs_over_time <- function(pred_start_date, num_days, config) {
 generate_full_dataset <- function(pred_start_date, num_days, config) {
   pred_end_date <- pred_start_date + num_days
   pred_inputs <- list(cbc = NULL, census = NULL, transfusion = NULL, inventory = NULL)
-  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1)
+  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1L)
 
   for (i in seq_along(all_pred_dates)) {
     date_str <- as.character(all_pred_dates[i])
@@ -152,11 +153,11 @@ generate_full_dataset <- function(pred_start_date, num_days, config) {
 #' @export
 plot_pred_vs_true_usage <- function(pred_table) {
 
-  first_day <- pred_table$date[1]
-  last_day <- pred_table$date[nrow(pred_table) - 3] # predictions end 3 days early
+  first_day <- pred_table$date[1L]
+  last_day <- pred_table$date[nrow(pred_table) - 3L] # predictions end 3 days early
   pred_table_trunc <- pred_table %>%
     dplyr::filter(date >= first_day) %>%
-    dplyr::filter(date <= last_day)
+    dplyr::filter(date < last_day)
 
   ggplot2::ggplot(data=pred_table_trunc) +
     ggplot2::geom_line(aes(x=date, y=`Three-day actual usage`)) +
@@ -179,8 +180,8 @@ plot_pred_vs_true_usage <- function(pred_table) {
 projection_loss <- function(pred_table, config) {
   ## (from pip/func.R) Since we skip for start days and then we see the results
   ## only three days later, we see waste is start + 5
-  first_day <- config$start + 5
-  last_day <- nrow(pred_table) - 1
+  first_day <- config$start + 5L
+  last_day <- nrow(pred_table) - 1L
   n <- last_day - first_day
 
   remaining_inventory <- pred_table$`No. expiring in 1 day` + pred_table$`No. expiring in 2 days`
@@ -209,8 +210,8 @@ projection_loss <- function(pred_table, config) {
 #' @importFrom pip pos
 #' @export
 real_loss <- function(pred_table, config) {
-  first_day_waste_seen <- config$start + 5
-  last_day_waste_seen <- nrow(pred_table) - 1
+  first_day_waste_seen <- config$start + 5L
+  last_day_waste_seen <- nrow(pred_table) - 1L
   n <- last_day_waste_seen - first_day_waste_seen
 
   remaining_inventory <- pred_table$`Inv. count` +
@@ -239,8 +240,8 @@ real_loss <- function(pred_table, config) {
 #' @export
 prediction_error <- function(pred_table, config) {
 
-  first_day <- pred_table$date[config$start + 5]
-  last_day <- pred_table$date[nrow(pred_table) - 3]
+  first_day <- pred_table$date[config$start + 5L]
+  last_day <- pred_table$date[nrow(pred_table) - 3L]
 
   prediction_error <- list("Overall" = NA, "Sunday" = NA,
                            "Monday" = NA, "Tuesday" = NA,
@@ -276,9 +277,9 @@ prediction_error <- function(pred_table, config) {
 #'         the overall efficacy of the model)
 #' @export
 pred_table_analysis <- function(pred_table, config) {
-  list(pred_start = pred_table$date[config$start + 5],
-       pred_end = pred_table$date[nrow(pred_table) - 1],
-       num_days = nrow(pred_table) - config$start - 6, # effective number of days
+  list(pred_start = pred_table$date[config$start + 5L],
+       pred_end = pred_table$date[nrow(pred_table) - 1L],
+       num_days = nrow(pred_table) - config$start - 6L, # effective number of days
        proj_loss = projection_loss(pred_table, config),
        real_loss = real_loss(pred_table, config),
        three_day_pred_rmse = prediction_error(pred_table, config))

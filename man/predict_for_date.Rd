@@ -4,8 +4,11 @@
 \alias{predict_for_date}
 \title{Predict usage for a specified date}
 \usage{
-predict_for_date(config, date = as.character(Sys.Date(), format =
-  "\%Y-\%m-\%d"), prev_day = NA)
+predict_for_date(
+  config,
+  date = as.character(Sys.Date(), format = "\%Y-\%m-\%d"),
+  prev_day = NA
+)
 }
 \arguments{
 \item{config}{the site configuration}
