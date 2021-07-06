@@ -10,3 +10,4 @@
 ^LICENSE\.md$
 ^CRAN-RELEASE$
 ^inst/misc
+^inst/doc$

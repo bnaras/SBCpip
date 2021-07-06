@@ -111,7 +111,7 @@ get_coefs_over_time <- function(pred_start_date, num_days, config) {
 #' @param config the site-specific configuration
 #' @return a dataset tibble with date, product usage (transfusion), CBC, census, and inventory
 #' @importFrom dplyr left_join rename mutate
-#' @importFrom magrittr %>%, %<>%
+#' @importFrom magrittr %>% %<>%
 #' @export
 generate_full_dataset <- function(pred_start_date, num_days, config) {
   pred_end_date <- pred_start_date + num_days
