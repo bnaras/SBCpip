@@ -15,12 +15,14 @@ sbc_build_and_save_seed_data <- function(pred_start_date, config) {
   seed_end_date <- pred_start_date - 1L
   all_seed_dates <- seq.Date(from = seed_start_date, to = seed_end_date, by = 1L)
   
-  seed_data <- list(cbc = NULL, census = NULL, transfusion = NULL, inventory = NULL)
+  seed_data <- list(cbc = NULL, census = NULL, transfusion = NULL, surgery = NULL, inventory = NULL)
+  
   for (i in seq_along(all_seed_dates)) {
     date_str <- as.character(all_seed_dates[i])
     data_single_day <- process_data_for_date(config = config, date = date_str)
     seed_data$cbc %<>% rbind(data_single_day$cbc)
     seed_data$census %<>% rbind(data_single_day$census)
+    seed_data$surgery %<>% rbind(data_single_day$surgery)
     seed_data$transfusion %<>% rbind(data_single_day$transfusion)
     seed_data$inventory %<>% rbind(data_single_day$inventory)
   }

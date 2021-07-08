@@ -440,8 +440,6 @@ read_one_surgery_file <- function(filename, services) {
                                 col_types = do.call(readr::cols, col_types),
                                 progress = FALSE)
 
-    #dates <- unique(sort(as.Date(raw_data$SURGERY_DATE)))
-
     ## Stop if no data
     if (nrow(raw_data) < 1) {
         loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
@@ -474,34 +472,35 @@ summarize_and_clean_surgery <- function(raw_data, services) {
 
     if (any(is.na(raw_data$SURGERY_DATE))) {
         result$errorCode <- 1
-        result$errorMessage <- "Bad Issue Date/Time column!"
+        result$errorMessage <- "Bad Surgery Date/Time column!"
         return(result)
     }
 
     # Update this section depending on which features are deemed significant
     raw_data %>%
         dplyr::distinct(.data$LOG_ID, .keep_all = TRUE) %>% # There are many repeated log IDs
-        dplyr::filter(.data$PARENT_HOSPITAL == "Non-ValleyCare") %>% # Ignore Pleasanton
         dplyr::mutate(date = as.Date(.data$SURGERY_DATE),
                       case_class = .data$CASE_CLASS,
-                      or_service = .data$OR_SERVICE) %>%
+                      or_service = factor(x = .data$OR_SERVICE, levels = services)) %>%
         dplyr::select(.data$date, .data$case_class, .data$or_service) -> filtered_data
 
     # Look at counts for most common procedures
     filtered_data %>%
-        dplyr::filter(.data$or_service %in% services) %>%
-        dplyr::group_by(.data$date, .data$or_service) %>%
-        dplyr::summarize(op_count = dplyr::n()) %>%
-        tidyr::pivot_wider(names_from = .data$or_service, values_from = .data$op_count, values_fill = 0) -> proc_data
+        dplyr::group_by(.data$date, .data$or_service, .drop = FALSE) %>%
+        dplyr::tally() %>%
+        tidyr::pivot_wider(names_from = .data$or_service, 
+                           values_from = .data$n, 
+                           values_fill = 0) -> 
+        proc_data -> result$data -> result$summary
 
-    # Look at number of urgent procedures
-    filtered_data %>%
-        dplyr::filter(.data$case_class == "Urgent") %>%
-        dplyr::group_by(.data$date) %>%
-        dplyr::summarize(urgent_count = dplyr::n()) ->
-        urgent_count
+    # Look at number of procedures 
+    #filtered_data %>%
+    #    #dplyr::filter(.data$case_class == "Urgent") %>%
+    #    dplyr::group_by(.data$date) %>%
+    #    dplyr::summarize(count = dplyr::n()) ->
+    #    count
 
-    proc_data %>% dplyr::left_join(urgent_count) -> result$data -> result$summary
+    #proc_data %>% dplyr::left_join(count) -> result$data -> result$summary
 
     result
 }
@@ -619,8 +618,6 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
     day_of_week <- t(sapply(base::weekdays(smoothed_cbc_features$date, abbreviate = TRUE),
                             function(x) {
                                 y <- day_of_week_vector
-                                #y <- rnorm(7)
-                                #names(y) <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
                                 y[x] <- 1
                                 y
                             })
@@ -629,6 +626,7 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
         tibble::as_tibble()
 }
 #' Construct a dataset for use in forecasting
+#' @param config a site-specific configuration list
 #' @param cbc_features the tibble of cbc features
 #' @param census the census data
 #' @param transfusion the transfusion data
@@ -639,21 +637,29 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
 #' @importFrom tidyr spread replace_na
 #' @importFrom rlang quo !!
 #' @export
-create_dataset <- function(cbc_features, census, transfusion) {
+create_dataset <- function(config,
+                           cbc_features, 
+                           census, 
+                           surgery, 
+                           transfusion) {
+    
     transfusion %>%
         dplyr::rename(plt_used = .data$used) %>%
-        dplyr::mutate(lag = ma(.data$plt_used, window_size = 7L)) %>%
+        dplyr::mutate(lag = ma(.data$plt_used, window_size = config$lag_window)) %>%
         dplyr::inner_join({
             cbc_features %>%
-                smooth_cbc_features(window_size = 7L) %>%
+                smooth_cbc_features(window_size = config$lag_window) %>%
                 add_days_of_week_columns()
         }, by = "date") %>%
-        dplyr::inner_join(census, by = "date") ->
+        dplyr::inner_join(census, by = "date") %>%
+        dplyr::inner_join(surgery, by = "date") ->
         dataset
+    
     if (nrow(dataset) != nrow(transfusion)) {
-        loggit::loggit(log_lvl = "ERROR", log_msg = "Missing data in for some dates in census, or transfusion or cbc_quartiles")
-        stop("Missing data in for some dates in census, or transfusion or cbc_quartiles")
+        loggit::loggit(log_lvl = "ERROR", log_msg = "Missing data for some dates in cbc_quartiles, census, surgery, or transfusion")
+        stop("Missing data in for some dates in cbc_quartiles, census, surgery, or transfusion")
     }
+    
     ## Order the columns as we expect
     ## date, followed by names of days of week, seven_lag, other predictors, response
     response <- "plt_used"
@@ -737,6 +743,10 @@ process_data_for_date <- function(config,
     census_file <- list.files(path = config$data_folder,
                               pattern = sprintf(config$census_filename_prefix, date),
                               full.names = TRUE)
+    
+    surgery_file <- list.files(path = config$data_folder,
+                               pattern = sprintf(config$surgery_filename_prefix, date),
+                               full.names = TRUE)
 
     transfusion_file <- list.files(path = config$data_folder,
                                    pattern = sprintf(config$transfusion_filename_prefix, date),
@@ -745,13 +755,14 @@ process_data_for_date <- function(config,
     inventory_file <- list.files(path = config$data_folder,
                                  pattern = sprintf(config$inventory_filename_prefix, date),
                                  full.names = TRUE)
-
-    if (length(cbc_file) != 1L || length(census_file) != 1L ||
+    
+    if (length(cbc_file) != 1L || length(census_file) != 1L || length(surgery_file) != 1L ||
         length(transfusion_file) != 1L || length(inventory_file) > 1L) {
         loggit::loggit(log_lvl = "ERROR", log_msg = "Too few or too many files matching patterns!")
         stop("Too few or too many files matching patterns!")
     }
 
+    # Process CBC data
     cbc_data <- read_one_cbc_file(cbc_file,
                                   cbc_abnormals = config$cbc_abnormals,
                                   cbc_vars = config$cbc_vars)
@@ -766,6 +777,7 @@ process_data_for_date <- function(config,
         dplyr::distinct() ->
         cbc
 
+    # Process Census data
     census_data <- read_one_census_file(census_file,
                                         locations = config$census_locations)
 
@@ -774,6 +786,10 @@ process_data_for_date <- function(config,
                      filename = census_data$filename)
 
     census_data <- census_data$census_data
+    
+    # (This is to set 0 as the NA replacement option for every census column,
+    # as census appears to be the most likely group of features to change)
+    # Not sure this step is necessary.
     replacement <- lapply(names(census_data)[-1], function(x) 0)
     names(replacement) <- names(census_data)[-1]
     census_data %>%
@@ -781,7 +797,21 @@ process_data_for_date <- function(config,
         dplyr::distinct() %>%
         dplyr::arrange(date) ->
         census
+    
+    # Process Surgery data
+    surgery_data <- read_one_surgery_file(surgery_file,
+                                          services = config$surgery_services)
+    
+    save_report_file(report_tbl = surgery_data$report,
+                     report_folder = config$report_folder,
+                     filename = surgery_data$filename)
 
+    surgery_data$surgery_data %>%
+        dplyr::distinct() %>%
+        dplyr::arrange(date) ->
+        surgery
+    
+    # Process Transfusion data
     transfusion_data <- read_one_transfusion_file(transfusion_file)
 
     save_report_file(report_tbl = transfusion_data$report,
@@ -793,6 +823,7 @@ process_data_for_date <- function(config,
         dplyr::arrange(date) ->
         transfusion
 
+    # Process inventory data
     if (length(inventory_file) > 0) {
         inventory_data <- read_one_inventory_file(inventory_file)
         save_report_file(report_tbl = inventory_data$report,
@@ -800,6 +831,7 @@ process_data_for_date <- function(config,
                          filename = inventory_data$filename)
 
         inventory_data$inventory_data %>%
+            dplyr::distinct() %>%
             dplyr::arrange(date) ->
             inventory
     } else {
@@ -808,6 +840,7 @@ process_data_for_date <- function(config,
 
     list(cbc = cbc,
          census = census,
+         surgery = surgery,
          transfusion = transfusion,
          inventory = inventory)
 }
@@ -993,6 +1026,14 @@ predict_for_date <- function(config,
         loggit::loggit(log_lvl = "WARN", log_msg = unique_census_dates)
         multiple_dates_in_increment <- TRUE
     }
+    
+    unique_surgery_dates <- unique(result$surgery$date)
+    if (length(unique_surgery_dates) > 1L) {
+        loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in surgery file, model retraining forced!")
+        loggit::loggit(log_lvl = "WARN", log_msg = unique_surgery_dates)
+        multiple_dates_in_increment <- TRUE
+    }
+    
     unique_transfusion_dates <- unique(result$transfusion$date)
     if (length(unique_transfusion_dates) > 1L) {
         loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in transfusion file, model retraining forced!")
@@ -1011,37 +1052,49 @@ predict_for_date <- function(config,
     ## For census, we need to add any new data for previous dates, using sum
     dplyr::bind_rows(prev_data$census, result$census) %>%
         dplyr::group_by(date) %>%
-            dplyr::summarize_all(sum) ->
-            census ->
-            prev_data$census
+        dplyr::summarize_all(sum) ->
+        census ->
+        prev_data$census
+    
+    ## For surgery, we need to add any new data for previous dates, using sum
+    dplyr::bind_rows(prev_data$surgery, result$surgery) %>%
+        dplyr::group_by(date) %>%
+        dplyr::summarize_all(sum) ->
+        surgery ->
+        prev_data$surgery
 
     ## For transfusion, we need to add any new data for previous dates, using sum
     dplyr::bind_rows(prev_data$transfusion, result$transfusion) %>%
         dplyr::group_by(date) %>%
-            dplyr::summarize_all(sum) ->
-            transfusion ->
-            prev_data$transfusion
+        dplyr::summarize_all(sum) ->
+        transfusion ->
+        prev_data$transfusion
 
     prev_data$inventory <- inventory <- dplyr::bind_rows(prev_data$inventory, result$inventory)
 
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3a. Creating CBC features")
 
-    ## Create dataset.
+    ## Create dataset. We add the lag window to avoid NAs at the beginning of the dataset
     cbc_features <- tail(create_cbc_features(cbc = cbc, cbc_quantiles = config$cbc_quantiles),
-                         config$history_window + 1L + 7L)
-    census <- tail(census, config$history_window + 1L + 7L)
-    transfusion <- tail(transfusion, config$history_window + 1L + 7L)
+                         config$history_window + config$lag_window + 1L)
+    census <- tail(census, config$history_window + config$lag_window + 1L)
+    surgery <- tail(surgery, config$history_window + config$lag_window + 1L)
+    transfusion <- tail(transfusion, config$history_window + config$lag_window + 1L)
 
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3b. Creating training/prediction dataset")
 
     # define all variables (this allows mismatch between RDS columns and config)
     cbc_names <- sapply(config$cbc_vars, function(x) paste0(x, "_Nq"))
     all_vars <- c("date", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag",
-                  cbc_names, config$census_locations, "plt_used")
+                  cbc_names, 
+                  config$census_locations, 
+                  config$surgery_services,
+                  "plt_used")
 
-
-    dataset <- prev_data$dataset <- create_dataset(cbc_features = cbc_features,
+    dataset <- prev_data$dataset <- create_dataset(config,
+                                                   cbc_features = cbc_features,
                                                    census = census,
+                                                   surgery = surgery,
                                                    transfusion = transfusion) %>% dplyr::select(all_vars)
 
     recent_data <- tail(dataset, n = config$history_window + 1L)
@@ -1074,18 +1127,21 @@ predict_for_date <- function(config,
 
         # ensure that no NA values are fed into build_model
         data <- as.data.frame(scaled_dataset$scaled_data, optional=TRUE)
+
         if (sum(is.na(data)) > 0) {
             data[is.na(data)] <- 0
             loggit::loggit(log_lvl = "WARN", log_msg ='Warning: NA values found in scaled dataset - replacing with 0')
         }
 
-        prev_data$model <- pip::build_model(c0 = config$c0,
+        prev_data$model <- pip::build_model(data = data,
+                                            c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
                                             initial_expiry_data = config$initial_expiry_data,
                                             initial_collection_data = config$initial_collection_data,
                                             start = config$start,
-                                            data = data)
+                                            min_lambda = config$min_lambda
+                                            )
     } else {
         loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")
         ## use previous scaling which is available in the saved scaled_dataset

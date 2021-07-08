@@ -32,7 +32,7 @@ LazyData: true
 Suggests: knitr, rmarkdown
 Imports: dplyr, readr, readxl, writexl, magrittr, tidyselect,
         lubridate, tidyverse, tibble, ggExtra, shiny, shinydashboard,
-        stringr, tidyr, rlang, pip, loggit, jsonlite, bibtex
+        stringr, tidyr, rlang, pip, loggit, jsonlite, ggplot2, gridExtra, bibtex
 RoxygenNote: 7.1.1.9001
 NeedsCompilation: no
 Packaged: 2021-03-19 22:40:54 UTC; naras

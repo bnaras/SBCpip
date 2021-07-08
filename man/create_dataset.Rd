@@ -4,9 +4,11 @@
 \alias{create_dataset}
 \title{Construct a dataset for use in forecasting}
 \usage{
-create_dataset(cbc_features, census, transfusion)
+create_dataset(config, cbc_features, census, surgery, transfusion)
 }
 \arguments{
+\item{config}{a site-specific configuration list}
+
 \item{cbc_features}{the tibble of cbc features}
 
 \item{census}{the census data}

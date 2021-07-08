@@ -16,6 +16,7 @@ The configuration is a list of items.
   \item{\code{cbc_abnormals}}{a named list of site-specific functions that flag values as abnormal or not}
   \item{\code{cbc_vars}}{a list of names of CBC variables of interest, i.e. specific values of \code{BASE_NAME}}
   \item{\code{census_locations}}{a character vector locations that need to be used for modeling}
+  \item{\code{surgery_services}}{a character vector of OR services that need to be used for modeling}
   \item{\code{c0}}{a value to use in training for c0}
   \item{\code{min_inventory}}{a value to use as offset to ensure a minimum threshold}
   \item{\code{history_window}}{how many days of history to use in training, default 200}
@@ -28,12 +29,15 @@ The configuration is a list of items.
   \item{\code{output_folder}}{full path of where processed output data should go, must exist}
   \item{\code{log_folder}}{full path of where logs should go, must exist}
   \item{\code{model_update_frequency}}{how often to update the model, default 7 days}
+  \item{\code{lag_window}}{number of previous days to average in smoothing, default 7 days}
   \item{\code{cbc_filename_prefix}}{a character expression describing the prefix of daily CBC file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
   \item{\code{census_filename_prefix}}{a character expression describing the prefix of daily census file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
+  \item{\code{surgery_filename_prefix}}{a character expression describing the prefix of daily surgery file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
   \item{\code{transfusion_filename_prefix}}{a character expression describing the prefix of daily transfusion file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
   \item{\code{output_filename_prefix}}{a character expression describing the prefix of daily output file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
   \item{\code{log_filename_prefix}}{a character expression describing the prefix of log file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
   \item{\code{inventory_filename_prefix}}{a character expression describing the prefix of the inventory file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
+  
 }
 }
 \examples{

@@ -28,12 +28,14 @@ SBC_config <- function() {
             'WBC' = function(x) x > 10.3,   ## K/muL
             'HCT' = function(x) x < 34 ## NARAS ADDED THIS!!
         ),
-        census_locations = c("FGR", "E2-ICU", "C3", "E3",  "B3", "B2", "F3",
-                             "C2", "E1", "B1", "H2", "VCP 3 WEST",
-                             "VCP 2 WEST", "VCP 1 WEST", "VCL SKILLED NURSING FACILITY",
-                             "G2P", "G2S", "C1", "J2", "J4", "J5", "J6", "J7", "M5", "M6", "M7"), # (KO) Need to make this more dynamic
-        surgery_services = c("Gastroenterology", "Interventional Radiology", "Orthopedics",
-                             "Neuroradiology", "Transplant", "Cardiac"), # Counts of types of surgeries conducted (OR_SERVICE)
+        census_locations = c("B1", "B2", "B3", "C1", "C2", "C3", "E2-ICU", "EGR", "E3", "F3", 
+                             "FGR", "G2S", "CDU-CLIN DEC UNIT", "E1", "J2", "J4", "J5", "J6", 
+                             "J7", "K4", "K6", "K7", "L4", "L5", "L6", "L7", "M4", "M5", "M6", 
+                             "M7", "VCP 1 WEST", "VCP 2 NORTH", "VCP 2 WEST", "VCP 3 WEST", 
+                             "VCP CCU 1", "VCP CCU 2", "VCP NICU", "VCP NURSERY"),
+        surgery_services = c("Cardiac", "Electrophysiology", "Gastroenterology", "General", 
+                             "Interventional Radiology", "Neuroradiology", "Orthopedics", 
+                             "Transplant", "Vascular"), # Counts of types of surgeries conducted (OR_SERVICE)
         c0 = 15, ## value for c0 to use in training model
         min_inventory = 30, ## the minimum inventory
         history_window = 200,  ## how many days to use in training
@@ -49,7 +51,9 @@ SBC_config <- function() {
         surgery_filename_prefix = "LAB-BB-CSRP-Surgery_Daily%s-",
         output_filename_prefix = "pip-output-%s.RDS",
         log_filename_prefix = "SBCpip_%s.json",
-        model_update_frequency = 7L ## every 7 days
+        model_update_frequency = 7L, ## every 7 days
+        lag_window = 7L,             ## number of previous days to average in smoothing
+        min_lambda = 0               ## lowest allowed value of lambda in cross validation
     )
     result$cbc_vars <- names(result$cbc_quantiles)[seq_len(9L)] ## Ignore HCT
     result$report_folder <- "E:/Blood_Center_Reports"
@@ -71,6 +75,7 @@ sbc_config <- SBC_config()
 #'   \item{\code{cbc_abnormals}}{a named list of site-specific functions that flag values as abnormal or not}
 #'   \item{\code{cbc_vars}}{a list of names of CBC variables of interest, i.e. specific values of \code{BASE_NAME}}
 #'   \item{\code{census_locations}}{a character vector locations that need to be used for modeling}
+#'   \item{\code{surgery_services}}{a character vector of OR services that need to be used for modeling}
 #'   \item{\code{c0}}{a value to use in training for c0}
 #'   \item{\code{min_inventory}}{a value to use as offset to ensure a minimum threshold}
 #'   \item{\code{history_window}}{how many days of history to use in training, default 200}
@@ -83,12 +88,15 @@ sbc_config <- SBC_config()
 #'   \item{\code{output_folder}}{full path of where processed output data should go, must exist}
 #'   \item{\code{log_folder}}{full path of where logs should go, must exist}
 #'   \item{\code{model_update_frequency}}{how often to update the model, default 7 days}
+#'   \item{\code{lag_window}}{number of previous days to average in smoothing, default 7 days}
 #'   \item{\code{cbc_filename_prefix}}{a character expression describing the prefix of daily CBC file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
 #'   \item{\code{census_filename_prefix}}{a character expression describing the prefix of daily census file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
+#'   \item{\code{surgery_filename_prefix}}{a character expression describing the prefix of daily surgery file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
 #'   \item{\code{transfusion_filename_prefix}}{a character expression describing the prefix of daily transfusion file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
 #'   \item{\code{output_filename_prefix}}{a character expression describing the prefix of daily output file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
 #'   \item{\code{log_filename_prefix}}{a character expression describing the prefix of log file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
 #'   \item{\code{inventory_filename_prefix}}{a character expression describing the prefix of the inventory file name, this is combined with the date is substituted with the date in YYYY-dd-mm format}
+#'   
 #' }
 #' @return the value of package global \code{sbc_config}.
 #' @importFrom utils assignInMyNamespace head tail
