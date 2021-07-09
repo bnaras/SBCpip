@@ -15,6 +15,8 @@ process_all_surgery_files(
 \arguments{
 \item{data_folder}{the folder containing the raw data}
 
+\item{services}{the operating room services (surgery types) to analyze}
+
 \item{report_folder}{the folder to write reports to, default is
 data_folder with "_Reports" appended. Must exist.}
 

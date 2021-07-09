@@ -13,6 +13,8 @@ create_dataset(config, cbc_features, census, surgery, transfusion)
 
 \item{census}{the census data}
 
+\item{surgery}{the surgery data}
+
 \item{transfusion}{the transfusion data}
 }
 \value{

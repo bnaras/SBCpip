@@ -1072,6 +1072,7 @@ predict_for_date <- function(config,
         transfusion ->
         prev_data$transfusion
 
+    # Inventory is updated. Then what? We need to use it to plug in initial collection and expiry values
     prev_data$inventory <- inventory <- dplyr::bind_rows(prev_data$inventory, result$inventory)
 
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3a. Creating CBC features")
@@ -1081,7 +1082,19 @@ predict_for_date <- function(config,
                          config$history_window + config$lag_window + 1L)
     census <- tail(census, config$history_window + config$lag_window + 1L)
     surgery <- tail(surgery, config$history_window + config$lag_window + 1L)
-    transfusion <- tail(transfusion, config$history_window + config$lag_window + 1L)
+    transfusion <- tail(transfusion, config$history_window + 1L)
+    
+    # Obtain collection and expiry data (add 1 for the additional previous day's inventory)
+    inventory <- tail(inventory, config$history_window + 1L)
+    
+    inventory %>% 
+        dplyr::mutate(date = as.Date(.data$date)) %>% # converting from dttm to date (not sure why it is a datetime)
+        dplyr::left_join(transfusion, by="date") %>%
+        dplyr::mutate(collection = dplyr::lead(.data$count, 1) - 
+                          .data$count + .data$used + 
+                          pip::pos(.data$r1 - .data$used)) %>% # Amt collected
+        dplyr::mutate(expiry1 = .data$r1 + .data$r2) %>% # Expiring in 1 day
+        dplyr::mutate(expiry2 = .data$r3_plus) -> inventory
 
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3b. Creating training/prediction dataset")
 
@@ -1112,6 +1125,7 @@ predict_for_date <- function(config,
                              model_changed ||
                              (prev_data$model_age %% config$model_update_frequency == 0L) ||
                              (date_diff > config$model_update_frequency))
+    
     if (model_needs_updating) {
         ## Provide informative log
         if (is.null(prev_data$model_age)) {
@@ -1136,11 +1150,11 @@ predict_for_date <- function(config,
         }
 
         prev_data$model <- pip::build_model(data = data,
+                                            expiry = list(e1 = inventory$expiry1, e2 = inventory$expiry2),
+                                            collection = inventory$collection,
                                             c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
-                                            initial_expiry_data = config$initial_expiry_data,
-                                            initial_collection_data = config$initial_collection_data,
                                             start = config$start,
                                             min_lambda = config$min_lambda
                                             )
