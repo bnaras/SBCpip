@@ -507,6 +507,7 @@ summarize_and_clean_surgery <- function(raw_data, services) {
 
 #' Process all surgery files in a folder and generate qc reports
 #' @param data_folder the folder containing the raw data
+#' @param services the operating room services (surgery types) to analyze
 #' @param report_folder the folder to write reports to, default is
 #'     data_folder with "_Reports" appended. Must exist.
 #' @param pattern the pattern to distinguish surgery files, default
@@ -629,6 +630,7 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
 #' @param config a site-specific configuration list
 #' @param cbc_features the tibble of cbc features
 #' @param census the census data
+#' @param surgery the surgery data
 #' @param transfusion the transfusion data
 #' @return a single tibble that contains the response, features and date (1st col)
 #' @importFrom magrittr %>%

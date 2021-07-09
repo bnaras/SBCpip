@@ -282,6 +282,8 @@ pred_table_analysis <- function(pred_table, config) {
   list(pred_start = pred_table$date[config$start + 5L],
        pred_end = pred_table$date[nrow(pred_table) - 1L],
        num_days = nrow(pred_table) - config$start - 6L, # effective number of days
+       total_adj_waste = sum(pred_table$`Adj. waste`),
+       total_adj_short = sum(pred_table$`Adj. shortage`),
        proj_loss = projection_loss(pred_table, config),
        real_loss = real_loss(pred_table, config),
        three_day_pred_rmse = prediction_error(pred_table, config))
