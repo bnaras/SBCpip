@@ -1081,8 +1081,8 @@ predict_for_date <- function(config,
     cbc_features <- tail(create_cbc_features(cbc = cbc, cbc_quantiles = config$cbc_quantiles),
                          config$history_window + config$lag_window + 1L)
     census <- tail(census, config$history_window + config$lag_window + 1L)
-    surgery <- tail(surgery, config$history_window + config$lag_window + 1L)
-    transfusion <- tail(transfusion, config$history_window + 1L)
+    surgery <- tail(surgery, config$history_window + config$lag_window + 1L)  # need lag_window for smoothing
+    transfusion <- tail(transfusion, config$history_window + config$lag_window + 1L) # need lag_window for lag
     
     # Obtain collection and expiry data (add 1 for the additional previous day's inventory)
     inventory <- tail(inventory, config$history_window + 1L)
