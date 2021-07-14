@@ -642,7 +642,7 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
 create_dataset <- function(config,
                            cbc_features, 
                            census, 
-                           surgery, 
+                           #surgery, 
                            transfusion) {
     
     transfusion %>%
@@ -653,8 +653,8 @@ create_dataset <- function(config,
                 smooth_cbc_features(window_size = config$lag_window) %>%
                 add_days_of_week_columns()
         }, by = "date") %>%
-        dplyr::inner_join(census, by = "date") %>%
-        dplyr::inner_join(surgery, by = "date") ->
+        dplyr::inner_join(census, by = "date") -> #%>%
+        #dplyr::inner_join(surgery, by = "date") ->
         dataset
     
     if (nrow(dataset) != nrow(transfusion)) {
@@ -1029,12 +1029,12 @@ predict_for_date <- function(config,
         multiple_dates_in_increment <- TRUE
     }
     
-    unique_surgery_dates <- unique(result$surgery$date)
-    if (length(unique_surgery_dates) > 1L) {
-        loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in surgery file, model retraining forced!")
-        loggit::loggit(log_lvl = "WARN", log_msg = unique_surgery_dates)
-        multiple_dates_in_increment <- TRUE
-    }
+    #unique_surgery_dates <- unique(result$surgery$date)
+    #if (length(unique_surgery_dates) > 1L) {
+    #    loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in surgery file, model retraining forced!")
+    #    loggit::loggit(log_lvl = "WARN", log_msg = unique_surgery_dates)
+    #    multiple_dates_in_increment <- TRUE
+    #}
     
     unique_transfusion_dates <- unique(result$transfusion$date)
     if (length(unique_transfusion_dates) > 1L) {
@@ -1059,11 +1059,11 @@ predict_for_date <- function(config,
         prev_data$census
     
     ## For surgery, we need to add any new data for previous dates, using sum
-    dplyr::bind_rows(prev_data$surgery, result$surgery) %>%
-        dplyr::group_by(date) %>%
-        dplyr::summarize_all(sum) ->
-        surgery ->
-        prev_data$surgery
+    #dplyr::bind_rows(prev_data$surgery, result$surgery) %>%
+    #    dplyr::group_by(date) %>%
+    #    dplyr::summarize_all(sum) ->
+    #    surgery ->
+    #    prev_data$surgery
 
     ## For transfusion, we need to add any new data for previous dates, using sum
     dplyr::bind_rows(prev_data$transfusion, result$transfusion) %>%
@@ -1081,7 +1081,7 @@ predict_for_date <- function(config,
     cbc_features <- tail(create_cbc_features(cbc = cbc, cbc_quantiles = config$cbc_quantiles),
                          config$history_window + config$lag_window + 1L)
     census <- tail(census, config$history_window + config$lag_window + 1L)
-    surgery <- tail(surgery, config$history_window + config$lag_window + 1L)  # need lag_window for smoothing
+    #surgery <- tail(surgery, config$history_window + config$lag_window + 1L)  # need lag_window for smoothing
     transfusion <- tail(transfusion, config$history_window + config$lag_window + 1L) # need lag_window for lag
     
     # Obtain collection and expiry data (add 1 for the additional previous day's inventory)
@@ -1103,13 +1103,13 @@ predict_for_date <- function(config,
     all_vars <- c("date", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag",
                   cbc_names, 
                   config$census_locations, 
-                  config$surgery_services,
+                  #config$surgery_services,
                   "plt_used")
 
     dataset <- prev_data$dataset <- create_dataset(config,
                                                    cbc_features = cbc_features,
                                                    census = census,
-                                                   surgery = surgery,
+                                                   #surgery = surgery,
                                                    transfusion = transfusion) %>% dplyr::select(all_vars)
 
     recent_data <- tail(dataset, n = config$history_window + 1L)
