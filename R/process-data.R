@@ -644,7 +644,7 @@ create_dataset <- function(config,
                            census, 
                            #surgery, 
                            transfusion) {
-    
+
     transfusion %>%
         dplyr::rename(plt_used = .data$used) %>%
         dplyr::mutate(lag = ma(.data$plt_used, window_size = config$lag_window)) %>%
@@ -746,9 +746,9 @@ process_data_for_date <- function(config,
                               pattern = sprintf(config$census_filename_prefix, date),
                               full.names = TRUE)
     
-    surgery_file <- list.files(path = config$data_folder,
-                               pattern = sprintf(config$surgery_filename_prefix, date),
-                               full.names = TRUE)
+    #surgery_file <- list.files(path = config$data_folder,
+    #                           pattern = sprintf(config$surgery_filename_prefix, date),
+    #                           full.names = TRUE)
 
     transfusion_file <- list.files(path = config$data_folder,
                                    pattern = sprintf(config$transfusion_filename_prefix, date),
@@ -758,8 +758,11 @@ process_data_for_date <- function(config,
                                  pattern = sprintf(config$inventory_filename_prefix, date),
                                  full.names = TRUE)
     
-    if (length(cbc_file) != 1L || length(census_file) != 1L || length(surgery_file) != 1L ||
-        length(transfusion_file) != 1L || length(inventory_file) > 1L) {
+    if (length(cbc_file) != 1L || 
+        length(census_file) != 1L || 
+        #length(surgery_file) != 1L ||
+        length(transfusion_file) != 1L || 
+        length(inventory_file) > 1L) {
         loggit::loggit(log_lvl = "ERROR", log_msg = "Too few or too many files matching patterns!")
         stop("Too few or too many files matching patterns!")
     }
@@ -796,22 +799,22 @@ process_data_for_date <- function(config,
     names(replacement) <- names(census_data)[-1]
     census_data %>%
         tidyr::replace_na(replace = replacement) %>%
-        dplyr::distinct() %>%
+        dplyr::distinct() %>% # part of original code
         dplyr::arrange(date) ->
         census
     
     # Process Surgery data
-    surgery_data <- read_one_surgery_file(surgery_file,
-                                          services = config$surgery_services)
+    #surgery_data <- read_one_surgery_file(surgery_file,
+    #                                      services = config$surgery_services)
     
-    save_report_file(report_tbl = surgery_data$report,
-                     report_folder = config$report_folder,
-                     filename = surgery_data$filename)
+    #save_report_file(report_tbl = surgery_data$report,
+    #                 report_folder = config$report_folder,
+    #                 filename = surgery_data$filename)
 
-    surgery_data$surgery_data %>%
-        dplyr::distinct() %>%
-        dplyr::arrange(date) ->
-        surgery
+    #surgery_data$surgery_data %>%
+    #    dplyr::distinct() %>%
+    #    dplyr::arrange(date) ->
+    #    surgery
     
     # Process Transfusion data
     transfusion_data <- read_one_transfusion_file(transfusion_file)
@@ -821,7 +824,7 @@ process_data_for_date <- function(config,
                      filename = transfusion_data$filename)
 
     transfusion_data$transfusion_data %>%
-        dplyr::distinct() %>%
+        dplyr::distinct() %>% # part of original code
         dplyr::arrange(date) ->
         transfusion
 
@@ -842,7 +845,7 @@ process_data_for_date <- function(config,
 
     list(cbc = cbc,
          census = census,
-         surgery = surgery,
+    #     surgery = surgery,
          transfusion = transfusion,
          inventory = inventory)
 }
@@ -1150,13 +1153,13 @@ predict_for_date <- function(config,
         }
 
         prev_data$model <- pip::build_model(data = data,
-                                            expiry = list(e1 = inventory$expiry1, e2 = inventory$expiry2),
-                                            collection = inventory$collection,
+                                            #expiry = list(e1 = inventory$expiry1, e2 = inventory$expiry2),
+                                            #collection = inventory$collection,
                                             c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
                                             start = config$start,
-                                            min_lambda = config$min_lambda
+                                            l1_bound_range = c(config$min_l1_bound, config$max_l1_bound)
                                             )
     } else {
         loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")

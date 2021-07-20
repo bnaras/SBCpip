@@ -91,7 +91,7 @@ get_coefs_over_time <- function(pred_start_date, num_days, config) {
     }
     else {
       d <- readRDS(output_file)
-      model_coefs %>% rbind(c(d$model$coefs, lambda = d$model$lambda)) -> model_coefs
+      model_coefs %>% rbind(c(d$model$coefs, l1_bound = d$model$l1_bound)) -> model_coefs
       print(paste("Added model coefs for day", i))
     }
   }
