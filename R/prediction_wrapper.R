@@ -72,7 +72,7 @@ sbc_predict_for_range <- function(pred_start_date, num_days, config) {
 #' @importFrom dplyr relocate
 #' @importFrom magrittr %>%
 #' @export
-get_coefs_over_time <- function(pred_start_date, num_days, config) {
+build_coefficient_table <- function(pred_start_date, num_days, config) {
   # Collect model coefficients over all output files (only need one set per week)
   
   model_coefs <- NULL
@@ -91,7 +91,9 @@ get_coefs_over_time <- function(pred_start_date, num_days, config) {
     }
     else {
       d <- readRDS(output_file)
-      model_coefs %>% rbind(c(d$model$coefs, l1_bound = d$model$l1_bound)) -> model_coefs
+      model_coefs %>% rbind(c(d$model$coefs, 
+                              l1_bound = d$model$l1_bound, 
+                              lag_bound = d$model$lag_bound)) -> model_coefs
       print(paste("Added model coefs for day", i))
     }
   }
@@ -190,10 +192,10 @@ projection_loss <- function(pred_table, config) {
   adj_remaining_inventory <- pred_table$`Adj. no. expiring in 1 day` + pred_table$`Adj. no. expiring in 2 days`
   
   loss <- sum( pred_table$Waste[seq(first_day, last_day)]) +
-    sum(((pip::pos(config$penalty_factor - remaining_inventory))^2) [seq(first_day, last_day)])
+    sum(((pip::pos(config$penalty_factor - remaining_inventory))) [seq(first_day, last_day)])
   
   adj_loss <- sum( pred_table$`Adj. waste`[seq(first_day, last_day)]) +
-    sum(((pip::pos(config$penalty_factor - adj_remaining_inventory))^2) [seq(first_day, last_day)])
+    sum(((pip::pos(config$penalty_factor - adj_remaining_inventory))) [seq(first_day, last_day)])
   
   list(`Avg. Daily Loss` = loss / n, `Adj. Avg. Daily Loss` = adj_loss / n)
 }
@@ -221,7 +223,7 @@ real_loss <- function(pred_table, config) {
     pred_table$`Platelet usage`
   
   loss <- sum(pred_table$`True Waste`[seq(first_day_waste_seen, last_day_waste_seen)]) +
-    sum(((pip::pos(config$penalty_factor - remaining_inventory))^2) [seq(first_day_waste_seen, last_day_waste_seen)])
+    sum(((pip::pos(config$penalty_factor - remaining_inventory))) [seq(first_day_waste_seen, last_day_waste_seen)])
   
   list(`Real Avg. Daily Loss` = loss / n)
   
@@ -245,8 +247,8 @@ prediction_error <- function(pred_table, config) {
   first_day <- pred_table$date[config$start + 5L]
   last_day <- pred_table$date[nrow(pred_table) - 3L]
   
-  prediction_error <- list("Overall" = NA, "Sunday" = NA,
-                           "Monday" = NA, "Tuesday" = NA,
+  prediction_error <- list("Overall" = NA, "Pos." = NA, "Neg." = NA,
+                           "Sunday" = NA, "Monday" = NA, "Tuesday" = NA,
                            "Wednesday" = NA, "Thursday" = NA,
                            "Friday" = NA, "Saturday" = NA)
   
@@ -256,9 +258,14 @@ prediction_error <- function(pred_table, config) {
     dplyr::filter(date <= last_day)
   
   # Overall RMSE
-  n_all <- nrow(pred_table_trunc)
-  pred_rmse <- sqrt(sum((pred_table_trunc$`Three-day actual usage` - pred_table_trunc$`Three-day prediction`)^2) / n_all)
-  prediction_error[["Overall"]] <- pred_rmse
+  errs <- (pred_table_trunc$`Three-day actual usage` - pred_table_trunc$`Three-day prediction`)^2
+  pos_err <- sum(errs[pred_table_trunc$`Three-day actual usage` < pred_table_trunc$`Three-day prediction`])
+  neg_err <- sum(errs[pred_table_trunc$`Three-day actual usage` > pred_table_trunc$`Three-day prediction`])
+  tot_err <- pos_err + neg_err
+  
+  prediction_error[["Overall"]] <- sqrt(tot_err / nrow(pred_table_trunc))
+  prediction_error[["Pos."]] <- if (pos_err > 0) sqrt(pos_err / sum(pred_table_trunc$`Three-day actual usage` < pred_table_trunc$`Three-day prediction`))
+  prediction_error[["Neg."]] <- if (neg_err > 0) sqrt(neg_err / sum(pred_table_trunc$`Three-day actual usage` > pred_table_trunc$`Three-day prediction`))
   
   # RMSE by Day of Week
   for (dow in c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")) {
@@ -287,4 +294,27 @@ pred_table_analysis <- function(pred_table, config) {
        proj_loss = projection_loss(pred_table, config),
        real_loss = real_loss(pred_table, config),
        three_day_pred_rmse = prediction_error(pred_table, config))
+}
+
+#' Combine projection loss and prediction error calculation into a single evaluation.
+#'
+#' @param coef_table, the coefficient table generated from SBCpip::build_coefficient_table
+#' @param config the site-specific configuration
+#' @return a list containing the top 20 coefficient by sum of magnitudes over the analyzed period, 
+#' as well as the mean and standard deviation of their values.
+#' @export
+coef_table_analysis <- function(coef_table, config) {
+  # sum the absolute values of all of the coefficients (except intercept). 
+  # Display 20 coefficients in order of largest absolute sums and state average value over period
+  coef_table %>% 
+    dplyr::select(-c(intercept, l1_bound)) %>%
+    tidyr::pivot_longer(-c(date), names_to = "feat") %>%
+    dplyr::mutate(abs_val = abs(value)) %>%
+    dplyr::group_by(feat) %>%
+    dplyr::summarize(abs_sum = sum(abs_val), avg = mean(value), sd = sd(value)) %>% 
+    dplyr::arrange(desc(abs_sum)) %>%
+    dplyr::slice_head(n = 20L) %>%
+    dplyr::select(c(feat, avg, sd)) -> top_coefs
+  
+  top_coefs
 }

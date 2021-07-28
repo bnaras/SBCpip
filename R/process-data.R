@@ -1159,7 +1159,7 @@ predict_for_date <- function(config,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
                                             start = config$start,
-                                            l1_bound_range = c(config$min_l1_bound, config$max_l1_bound)
+                                            l1_bounds = config$l1_bounds
                                             )
     } else {
         loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")
@@ -1309,7 +1309,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     pred_mat[index, "w"] <- pip::pos(initial_expiry_data[1] - y[index])
     pred_mat[index, "r1"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
     pred_mat[index, "s"] <- pip::pos(y[index] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
-    # Do we need waste below? I think so.
+    # Do we need waste below? I think so. [We do not, but it doesn't impact the result]
     pred_mat[index, "r2"] <- pip::pos(pred_mat[index, "x"] - pip::pos(y[index] + pred_mat[index, "w"] - initial_expiry_data[1] - initial_expiry_data[2]))
     pred_mat[index + 3, "x"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
     pred_mat[index + 3, "x_adj"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
