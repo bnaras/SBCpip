@@ -1153,13 +1153,12 @@ predict_for_date <- function(config,
         }
 
         prev_data$model <- pip::build_model(data = data,
-                                            #expiry = list(e1 = inventory$expiry1, e2 = inventory$expiry2),
-                                            #collection = inventory$collection,
                                             c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
                                             start = config$start,
-                                            l1_bounds = config$l1_bounds
+                                            l1_bounds = config$l1_bounds,
+                                            lag_bounds = config$lag_bounds
                                             )
     } else {
         loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")

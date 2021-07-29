@@ -53,7 +53,8 @@ SBC_config <- function() {
         log_filename_prefix = "SBCpip_%s.json",
         model_update_frequency = 7L, ## every 7 days
         lag_window = 7L,             ## number of previous days to average in smoothing
-        l1_bounds = seq(from = 200, to = 0, by = -2) ## allowed values of the l1 bound in cross validation
+        l1_bounds = seq(from = 200, to = 0, by = -2), ## allowed values of the l1 bound in cross validation
+        lag_bounds = c(NA)     ## Vector of possible bounds on the seven day moving average parameter (NA = no bound)
     )
     result$cbc_vars <- names(result$cbc_quantiles)[seq_len(9L)] ## Ignore HCT
     result$report_folder <- "E:/Blood_Center_Reports"
