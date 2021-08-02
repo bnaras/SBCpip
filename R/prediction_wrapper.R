@@ -192,10 +192,12 @@ projection_loss <- function(pred_table, config) {
   adj_remaining_inventory <- pred_table$`Adj. no. expiring in 1 day` + pred_table$`Adj. no. expiring in 2 days`
   
   loss <- sum( pred_table$Waste[seq(first_day, last_day)]) +
-    sum(((pip::pos(config$penalty_factor - remaining_inventory))) [seq(first_day, last_day)])
+    sum((pip::pos(config$penalty_factor - remaining_inventory)^2) [seq(first_day, last_day)]) +
+    sum((pred_table$Shortage^2)[seq(first_day, last_day)])
   
   adj_loss <- sum( pred_table$`Adj. waste`[seq(first_day, last_day)]) +
-    sum(((pip::pos(config$penalty_factor - adj_remaining_inventory))) [seq(first_day, last_day)])
+    sum((pip::pos(config$penalty_factor - adj_remaining_inventory)^2) [seq(first_day, last_day)]) +
+    sum((pred_table$`Adj. Shortage`^2)[seq(first_day, last_day)])
   
   list(`Avg. Daily Loss` = loss / n, `Adj. Avg. Daily Loss` = adj_loss / n)
 }
@@ -304,6 +306,7 @@ pred_table_analysis <- function(pred_table, config) {
 #' as well as the mean and standard deviation of their values.
 #' @export
 coef_table_analysis <- function(coef_table, config) {
+  dows <- c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
   # sum the absolute values of all of the coefficients (except intercept). 
   # Display 20 coefficients in order of largest absolute sums and state average value over period
   coef_table %>% 
@@ -316,5 +319,7 @@ coef_table_analysis <- function(coef_table, config) {
     dplyr::slice_head(n = 20L) %>%
     dplyr::select(c(feat, avg, sd)) -> top_coefs
   
-  top_coefs
+  # separate day of week and other features
+  list(dow = top_coefs %>% filter(feat %in% dows), 
+       other = top_coefs %>% filter(!(feat %in% dows)))
 }
