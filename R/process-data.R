@@ -1318,7 +1318,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
         pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
         pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
         pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
-        pred_mat[i + 3, "x"] <- floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1))
+        pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1)), config$c0)
 
         # This set ensures that we have ordered not only enough to satisfy our prediction, but
         # also enough to replenish to our minimum inventory.
@@ -1326,7 +1326,10 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
         pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
         pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
         pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
-        pred_mat[i+3,"x_adj"] <- floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1"] - pred_mat[i,"r2"]) - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"] + 1))
+        pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] +
+                                                        pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) -
+                                                        pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - 
+                                                        pred_mat[i, "r2_adj"] + 1)), config$c0)
 
         # Why do we adjust the 3 day usage prediction? This seems independent of the inventory.
         t_adj[i] = t_adj[i] + pip::pos(min_inventory - pred_mat[i,"r1"] - pred_mat[i,"r2"])
@@ -1340,7 +1343,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
         inventory
 
     tibble::as_tibble(cbind(prediction_df, pred_mat[seq_len(N), ])) %>%
-        dplyr::mutate(t_true = dplyr::lead(plt_used, 1) + dplyr::lead(plt_used, 2) + dplyr::lead(plt_used, 3)
+        dplyr::mutate(t_true = dplyr::lead(plt_used, 1L) + dplyr::lead(plt_used, 2L) + dplyr::lead(plt_used, 3L)
                       ) %>%
         dplyr::relocate(t_true, .after = plt_used) %>%
         dplyr::left_join(inventory, by = "date") ->

@@ -197,7 +197,7 @@ projection_loss <- function(pred_table, config) {
   
   adj_loss <- sum( pred_table$`Adj. waste`[seq(first_day, last_day)]) +
     sum((pip::pos(config$penalty_factor - adj_remaining_inventory)^2) [seq(first_day, last_day)]) +
-    sum((pred_table$`Adj. Shortage`^2)[seq(first_day, last_day)])
+    sum((pred_table$`Adj. shortage`^2)[seq(first_day, last_day)])
   
   list(`Avg. Daily Loss` = loss / n, `Adj. Avg. Daily Loss` = adj_loss / n)
 }
@@ -225,7 +225,8 @@ real_loss <- function(pred_table, config) {
     pred_table$`Platelet usage`
   
   loss <- sum(pred_table$`True Waste`[seq(first_day_waste_seen, last_day_waste_seen)]) +
-    sum(((pip::pos(config$penalty_factor - remaining_inventory))) [seq(first_day_waste_seen, last_day_waste_seen)])
+    sum((pip::pos(config$penalty_factor - remaining_inventory)^2) [seq(first_day_waste_seen, last_day_waste_seen)]) +
+    sum((pred_table$`True Shortage`^2)[seq(first_day_waste_seen, last_day_waste_seen)])
   
   list(`Real Avg. Daily Loss` = loss / n)
   
