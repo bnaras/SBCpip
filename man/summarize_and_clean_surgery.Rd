@@ -4,7 +4,7 @@
 \alias{summarize_and_clean_surgery}
 \title{Summarize and clean the raw surgery data}
 \usage{
-summarize_and_clean_surgery(raw_data, services)
+summarize_and_clean_surgery(date, raw_data, services)
 }
 \arguments{
 \item{raw_data}{the raw data tibble}

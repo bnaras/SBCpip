@@ -4,7 +4,7 @@
 \alias{create_dataset}
 \title{Construct a dataset for use in forecasting}
 \usage{
-create_dataset(config, cbc_features, census, transfusion)
+create_dataset(config, cbc_features, census, surgery, transfusion)
 }
 \arguments{
 \item{config}{a site-specific configuration list}
@@ -13,9 +13,9 @@ create_dataset(config, cbc_features, census, transfusion)
 
 \item{census}{the census data}
 
-\item{transfusion}{the transfusion data}
-
 \item{surgery}{the surgery data}
+
+\item{transfusion}{the transfusion data}
 }
 \value{
 a single tibble that contains the response, features and date (1st col)

@@ -4,10 +4,10 @@
 \alias{read_one_surgery_file}
 \title{Read a single surgery file data and return tibble and summary}
 \usage{
-read_one_surgery_file(filename, services)
+read_one_surgery_file(filenames, services)
 }
 \arguments{
-\item{filename}{the fully qualified path of the file}
+\item{filenames}{the fully qualified path of the 3 files file}
 
 \item{services}{the list of surgery types considered as features}
 }

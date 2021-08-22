@@ -408,13 +408,16 @@ process_all_transfusion_files <- function(data_folder,
 }
 
 #' Read a single surgery file data and return tibble and summary
-#' @param filename the fully qualified path of the file
+#' @param filenames the fully qualified path of the 3 files file
 #' @param services the list of surgery types considered as features
 #' @return a list of four items, filename, raw_data (tibble), report a
 #'     list consisting of summary tibble, surgery_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @export
-read_one_surgery_file <- function(filename, services) {
+read_one_surgery_file <- function(filenames, services) {
+    if (length(filenames) != 3L){
+        stop("Not enough future surgery files found.")
+    }
 
     col_types <- list(
         LOG_ID = readr::col_character(),
@@ -433,24 +436,28 @@ read_one_surgery_file <- function(filename, services) {
         PARENT_HOSPITAL = readr::col_character()
     )
 
-    loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing", basename(path = filename)))
+    loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing files from", basename(path = filenames[1])))
 
-    raw_data <- readr::read_tsv(file = filename,
-                                col_names = TRUE,
-                                col_types = do.call(readr::cols, col_types),
-                                progress = FALSE)
+    # Bind the 3 future surgery files together
+    surgery_tbls <- filenames %>% 
+        lapply(readr::read_tsv, 
+               col_names = TRUE, 
+               col_types = do.call(readr::cols, col_types), 
+               progress = FALSE)
+
+    raw_data <- do.call(rbind, surgery_tbls)
 
     ## Stop if no data
     if (nrow(raw_data) < 1) {
-        loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
-        stop(sprintf("No data in file %s", filename))
+        loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filenames[1]))
+        stop(sprintf("No data in file %s", filenames[1]))
     }
     processed_data <- summarize_and_clean_surgery(raw_data, services)
     if (processed_data$errorCode != 0) {
         loggit::loggit(log_lvl = "ERROR", log_msg = processed_data$errorMessage)
         stop(processed_data$errorMessage)
     }
-    list(filename = filename,
+    list(filenames = filenames,
          raw_data = raw_data,
          report = list(summary = processed_data$summary),
          surgery_data = processed_data$data)
@@ -479,28 +486,27 @@ summarize_and_clean_surgery <- function(raw_data, services) {
     # Update this section depending on which features are deemed significant
     raw_data %>%
         dplyr::distinct(.data$LOG_ID, .keep_all = TRUE) %>% # There are many repeated log IDs
-        dplyr::mutate(date = as.Date(.data$SURGERY_DATE),
+        dplyr::mutate(surgery_date = as.Date(.data$SURGERY_DATE),
+                      sched_date = as.Date(.data$FIRST_SCHED_DATE),
                       case_class = .data$CASE_CLASS,
                       or_service = factor(x = .data$OR_SERVICE, levels = services)) %>%
-        dplyr::select(.data$date, .data$case_class, .data$or_service) -> filtered_data
-
-    # Look at counts for most common procedures
+        dplyr::select(.data$surgery_date, 
+                      .data$sched_date, 
+                      .data$case_class, 
+                      .data$or_service) -> filtered_data
+    
+    # Look at counts for most common procedures, known before today
+    curr_date <- min(filtered_data$surgery_date) - 1
     filtered_data %>%
-        dplyr::group_by(.data$date, .data$or_service, .drop = FALSE) %>%
+        dplyr::group_by(.data$or_service, .drop = FALSE) %>%
+        dplyr::filter( .data$case_class == "Elective"  ) %>% # Omit urgent for now
+        dplyr::filter(.data$sched_date < curr_date) %>% # Scheduled before today
         dplyr::tally() %>%
         tidyr::pivot_wider(names_from = .data$or_service, 
                            values_from = .data$n, 
-                           values_fill = 0) -> 
+                           values_fill = 0) %>%
+        dplyr::mutate(date = curr_date) -> 
         proc_data -> result$data -> result$summary
-
-    # Look at number of procedures 
-    #filtered_data %>%
-    #    #dplyr::filter(.data$case_class == "Urgent") %>%
-    #    dplyr::group_by(.data$date) %>%
-    #    dplyr::summarize(count = dplyr::n()) ->
-    #    count
-
-    #proc_data %>% dplyr::left_join(count) -> result$data -> result$summary
 
     result
 }
@@ -530,7 +536,7 @@ process_all_surgery_files <- function(data_folder,
     for (item in raw_surgery) {
         save_report_file(report_tbl = item$report,
                          report_folder = report_folder,
-                         filename = item$filename)
+                         filename = item$filenames)
     }
 
     Reduce(f = rbind,
@@ -642,9 +648,10 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
 create_dataset <- function(config,
                            cbc_features, 
                            census, 
-                           #surgery, 
+                           surgery, 
                            transfusion) {
-
+    
+    
     transfusion %>%
         dplyr::rename(plt_used = .data$used) %>%
         dplyr::mutate(lag = ma(.data$plt_used, window_size = config$lag_window)) %>%
@@ -653,8 +660,8 @@ create_dataset <- function(config,
                 smooth_cbc_features(window_size = config$lag_window) %>%
                 add_days_of_week_columns()
         }, by = "date") %>%
-        dplyr::inner_join(census, by = "date") -> #%>%
-        #dplyr::inner_join(surgery, by = "date") ->
+        dplyr::inner_join(census, by = "date") %>%
+        dplyr::inner_join(surgery, by = "date") ->
         dataset
     
     if (nrow(dataset) != nrow(transfusion)) {
@@ -681,7 +688,9 @@ create_dataset <- function(config,
 #' @importFrom tibble as_tibble
 #' @export
 scale_dataset <- function(dataset, center = NULL, scale = NULL) {
-
+    # make sure scale does not break the model
+    if (!is.null(scale)) scale[scale < 1.0e-12] = 1
+    
     dataset %>%
         dplyr::select(-.data$date, -.data$plt_used) ->
         data_matrix -> scaled_data
@@ -746,9 +755,13 @@ process_data_for_date <- function(config,
                               pattern = sprintf(config$census_filename_prefix, date),
                               full.names = TRUE)
     
-    #surgery_file <- list.files(path = config$data_folder,
-    #                           pattern = sprintf(config$surgery_filename_prefix, date),
-    #                           full.names = TRUE)
+    # Take surgery files from next 3 days (i + 2, i + 3, i + 4)
+    d_dates <- as.Date(date) + c(1, 2, 3)
+    surgery_files <- sapply(d_dates, function(x) {
+        list.files(path = config$data_folder,
+                   pattern = sprintf(config$surgery_filename_prefix, x),
+                   full.names = TRUE)
+        })
 
     transfusion_file <- list.files(path = config$data_folder,
                                    pattern = sprintf(config$transfusion_filename_prefix, date),
@@ -760,7 +773,7 @@ process_data_for_date <- function(config,
     
     if (length(cbc_file) != 1L || 
         length(census_file) != 1L || 
-        #length(surgery_file) != 1L ||
+        length(surgery_files) != 3L ||
         length(transfusion_file) != 1L || 
         length(inventory_file) > 1L) {
         loggit::loggit(log_lvl = "ERROR", log_msg = "Too few or too many files matching patterns!")
@@ -804,17 +817,17 @@ process_data_for_date <- function(config,
         census
     
     # Process Surgery data
-    #surgery_data <- read_one_surgery_file(surgery_file,
-    #                                      services = config$surgery_services)
+    surgery_data <- read_one_surgery_file(surgery_files,
+                                          services = config$surgery_services)
     
-    #save_report_file(report_tbl = surgery_data$report,
-    #                 report_folder = config$report_folder,
-    #                 filename = surgery_data$filename)
+    save_report_file(report_tbl = surgery_data$report,
+                     report_folder = config$report_folder,
+                     filename = surgery_data$filename)
 
-    #surgery_data$surgery_data %>%
-    #    dplyr::distinct() %>%
-    #    dplyr::arrange(date) ->
-    #    surgery
+    surgery_data$surgery_data %>%
+        dplyr::distinct() %>%
+        dplyr::arrange(date) ->
+        surgery
     
     # Process Transfusion data
     transfusion_data <- read_one_transfusion_file(transfusion_file)
@@ -839,13 +852,14 @@ process_data_for_date <- function(config,
             dplyr::distinct() %>%
             dplyr::arrange(date) ->
             inventory
+        
     } else {
         inventory = NULL
     }
 
     list(cbc = cbc,
          census = census,
-    #     surgery = surgery,
+         surgery = surgery,
          transfusion = transfusion,
          inventory = inventory)
 }
@@ -993,7 +1007,8 @@ process_all_inventory_files <- function(data_folder,
 #' @param config the site configuration
 #' @param date the date string for which the data is to be processed in "YYYY-mm-dd" format
 #' @param prev_day the previous date, default NA, which means it is computed from date
-#' @importFrom pip build_model predict_three_day_sum
+#' @param eval TRUE or FALSE value for whether to evaluate model during predictions
+#' @importFrom pip build_model predict_three_day_sum evaluate_model
 #' @importFrom magrittr %>%
 #' @importFrom dplyr group_by summarize_all
 #' @return a prediction tibble named prediction_df with a column for date and the prediction
@@ -1001,7 +1016,8 @@ process_all_inventory_files <- function(data_folder,
 #' @export
 predict_for_date <- function(config,
                              date = as.character(Sys.Date(), format = "%Y-%m-%d"),
-                             prev_day = NA) {
+                             prev_day = NA,
+                             eval = FALSE) {
 
     ## Previous date is one day before unless specified explicity
     if (is.na(prev_day))
@@ -1032,12 +1048,12 @@ predict_for_date <- function(config,
         multiple_dates_in_increment <- TRUE
     }
     
-    #unique_surgery_dates <- unique(result$surgery$date)
-    #if (length(unique_surgery_dates) > 1L) {
-    #    loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in surgery file, model retraining forced!")
-    #    loggit::loggit(log_lvl = "WARN", log_msg = unique_surgery_dates)
-    #    multiple_dates_in_increment <- TRUE
-    #}
+    unique_surgery_dates <- unique(result$surgery$date)
+    if (length(unique_surgery_dates) > 1L) {
+        loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in surgery file, model retraining forced!")
+        loggit::loggit(log_lvl = "WARN", log_msg = unique_surgery_dates)
+        multiple_dates_in_increment <- TRUE
+    }
     
     unique_transfusion_dates <- unique(result$transfusion$date)
     if (length(unique_transfusion_dates) > 1L) {
@@ -1062,11 +1078,11 @@ predict_for_date <- function(config,
         prev_data$census
     
     ## For surgery, we need to add any new data for previous dates, using sum
-    #dplyr::bind_rows(prev_data$surgery, result$surgery) %>%
-    #    dplyr::group_by(date) %>%
-    #    dplyr::summarize_all(sum) ->
-    #    surgery ->
-    #    prev_data$surgery
+    dplyr::bind_rows(prev_data$surgery, result$surgery) %>%
+        dplyr::group_by(date) %>%
+        dplyr::summarize_all(sum) ->
+        surgery ->
+        prev_data$surgery
 
     ## For transfusion, we need to add any new data for previous dates, using sum
     dplyr::bind_rows(prev_data$transfusion, result$transfusion) %>%
@@ -1075,7 +1091,6 @@ predict_for_date <- function(config,
         transfusion ->
         prev_data$transfusion
 
-    # Inventory is updated. Then what? We need to use it to plug in initial collection and expiry values
     prev_data$inventory <- inventory <- dplyr::bind_rows(prev_data$inventory, result$inventory)
 
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3a. Creating CBC features")
@@ -1084,7 +1099,7 @@ predict_for_date <- function(config,
     cbc_features <- tail(create_cbc_features(cbc = cbc, cbc_quantiles = config$cbc_quantiles),
                          config$history_window + config$lag_window + 1L)
     census <- tail(census, config$history_window + config$lag_window + 1L)
-    #surgery <- tail(surgery, config$history_window + config$lag_window + 1L)  # need lag_window for smoothing
+    surgery <- tail(surgery, config$history_window + config$lag_window + 1L)  # need lag_window for smoothing
     transfusion <- tail(transfusion, config$history_window + config$lag_window + 1L) # need lag_window for lag
     
     # Obtain collection and expiry data (add 1 for the additional previous day's inventory)
@@ -1106,13 +1121,13 @@ predict_for_date <- function(config,
     all_vars <- c("date", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag",
                   cbc_names, 
                   config$census_locations, 
-                  #config$surgery_services,
+                  config$surgery_services,
                   "plt_used")
 
     dataset <- prev_data$dataset <- create_dataset(config,
                                                    cbc_features = cbc_features,
                                                    census = census,
-                                                   #surgery = surgery,
+                                                   surgery = surgery,
                                                    transfusion = transfusion) %>% dplyr::select(all_vars)
 
     recent_data <- tail(dataset, n = config$history_window + 1L)
@@ -1158,8 +1173,19 @@ predict_for_date <- function(config,
                                             penalty_factor = config$penalty_factor,
                                             start = config$start,
                                             l1_bounds = config$l1_bounds,
-                                            lag_bounds = config$lag_bounds
-                                            )
+                                            lag_bounds = config$lag_bounds)
+        #if (eval) {
+            # Take this opportunity to evaluate the model
+            pip::evaluate_model(data = data,
+                        c0 = config$c0,
+                        train_window = config$history_window - 14L,
+                        test_window = 14L,
+                        penalty_factor = config$penalty_factor,
+                        start = config$start,
+                        l1_bounds = config$l1_bounds,
+                        lag_bounds = config$lag_bounds)
+        #}
+        
     } else {
         loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")
         ## use previous scaling which is available in the saved scaled_dataset
@@ -1268,10 +1294,6 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     }
     d <- readRDS(tail(output_files, 1L))
 
-    #d$dataset %>%
-    #    dplyr::select(.data$date, .data$plt_used) ->
-    #    d2
-
     # IMPORTANT:
     # d$dataset only includes the "history_window" used to retrain the model + 7 days
     # d$prediction_df includes all dates in the prediction range
@@ -1296,29 +1318,29 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     y <- prediction_df$plt_used
     t_pred <- prediction_df$t_pred
     initial_expiry_data <- config$initial_expiry_data
-    pred_mat <- matrix(0, nrow = N + 3, ncol = 12)
-    colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s", "t_adj",
+    pred_mat <- matrix(0, nrow = N + 3, ncol = 11)
+    colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s", #"t_adj",
                             "r1_adj", "r2_adj","w_adj", "x_adj", "s_adj")
 
     pred_mat[offset + (1:3), "x"] <- config$initial_collection_data
     pred_mat[offset + (1:3), "x_adj"] <- config$initial_collection_data
     index <- offset + 1
-    t_adj <- t_pred
+    #t_adj <- t_pred
 
-    pred_mat[index, "w"] <- pip::pos(initial_expiry_data[1] - y[index])
-    pred_mat[index, "r1"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
-    pred_mat[index, "s"] <- pip::pos(y[index] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
-    pred_mat[index, "r2"] <- pip::pos(pred_mat[index, "x"] - pip::pos(y[index]- initial_expiry_data[1] - initial_expiry_data[2]))
-    pred_mat[index + 3, "x"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
-    pred_mat[index + 3, "x_adj"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
-
+    pred_mat[index, "w"] <- pred_mat[index, "w_adj"] <- pip::pos(initial_expiry_data[1] - y[index])
+    pred_mat[index, "r1"] <- pred_mat[index, "r1_adj"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
+    pred_mat[index, "s"] <- pred_mat[index, "s_adj"] <- pip::pos(y[index] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
+    pred_mat[index, "r2"] <- pred_mat[index, "r2_adj"] <- pip::pos(pred_mat[index, "x"] - pip::pos(y[index]- initial_expiry_data[1] - initial_expiry_data[2]))
+    pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
+    
     for (i in seq.int(index + 1L, N)) {
         # These are the constraint parameters without adjusting for the minimum inventory
         pred_mat[i, "w"] <- pip::pos(pred_mat[i - 1 , "r1"] - y[i])
         pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
         pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
         pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
-        pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1)), config$c0)
+        pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] 
+                                                   - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1)), config$c0)
 
         # This set ensures that we have ordered not only enough to satisfy our prediction, but
         # also enough to replenish to our minimum inventory.
@@ -1326,15 +1348,12 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
         pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
         pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
         pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
-        pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] +
-                                                        pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) -
-                                                        pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - 
-                                                        pred_mat[i, "r2_adj"] + 1)), config$c0)
-
+        pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) 
+                                                    - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"] + 1)), config$c0)
         # Why do we adjust the 3 day usage prediction? This seems independent of the inventory.
-        t_adj[i] = t_adj[i] + pip::pos(min_inventory - pred_mat[i,"r1"] - pred_mat[i,"r2"])
+        #t_adj[i] = t_adj[i] + pip::pos(min_inventory - pred_mat[i,"r1"] - pred_mat[i,"r2"])
     }
-    pred_mat[1:N,"t_adj"] = t_adj
+    #pred_mat[1:N,"t_adj"] = t_adj
 
     pred_mat[, "Alert"] <- (pred_mat[, "r1"] + pred_mat[, "r2"] <= min_inventory)
 
@@ -1359,7 +1378,6 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
                            "Waste",
                            "No. to order per prediction",
                            "Shortage",
-                           "Adj. three-day prediction",
                            "Adj. no. expiring in 1 day",
                            "Adj. no. expiring in 2 days",
                            "Adj. waste",

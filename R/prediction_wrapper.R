@@ -317,7 +317,7 @@ coef_table_analysis <- function(coef_table, config) {
     dplyr::group_by(feat) %>%
     dplyr::summarize(abs_sum = sum(abs_val), avg = mean(value), sd = sd(value)) %>% 
     dplyr::arrange(desc(abs_sum)) %>%
-    dplyr::slice_head(n = 20L) %>%
+    #dplyr::slice_head(n = 20L) %>%
     dplyr::select(c(feat, avg, sd)) -> top_coefs
   
   # separate day of week and other features
