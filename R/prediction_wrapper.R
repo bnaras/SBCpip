@@ -28,6 +28,7 @@ sbc_build_and_save_seed_data <- function(pred_start_date, config) {
   }
   
   # Save the seed dataset
+  ################ REPLACE WITH DATABASE CALL #######################
   saveRDS(object = seed_data,
           file = file.path(config$output_folder,
                            sprintf(config$output_filename_prefix, as.character(seed_end_date))))
@@ -90,6 +91,7 @@ build_coefficient_table <- function(pred_start_date, num_days, config) {
       print(paste0("No output files generated for date ", date))
     }
     else {
+      ############### REPLACE WITH DATABASE CALL ####################
       d <- readRDS(output_file)
       model_coefs %>% rbind(c(d$model$coefs, 
                               l1_bound = d$model$l1_bound, 
@@ -184,9 +186,9 @@ plot_pred_vs_true_usage <- function(pred_table) {
 projection_loss <- function(pred_table, config) {
   ## (from pip/func.R) Since we skip for start days and then we see the results
   ## only three days later, we see waste is start + 5
-  first_day <- config$start + 5L
-  last_day <- nrow(pred_table) - 1L
-  n <- last_day - first_day
+  first_day <- config$start + 6L
+  last_day <- nrow(pred_table) - 3L
+  n <- last_day - first_day + 1L
   
   remaining_inventory <- pred_table$`No. expiring in 1 day` + pred_table$`No. expiring in 2 days`
   adj_remaining_inventory <- pred_table$`Adj. no. expiring in 1 day` + pred_table$`Adj. no. expiring in 2 days`
@@ -216,17 +218,17 @@ projection_loss <- function(pred_table, config) {
 #' @importFrom pip pos
 #' @export
 real_loss <- function(pred_table, config) {
-  first_day_waste_seen <- config$start + 5L
-  last_day_waste_seen <- nrow(pred_table) - 1L
-  n <- last_day_waste_seen - first_day_waste_seen
+  first_day <- config$start + 6L
+  last_day <- nrow(pred_table) - 3L
+  n <- last_day - first_day + 1L
   
   remaining_inventory <- pred_table$`Inv. count` +
     pred_table$`Fresh Units Ordered` -
     pred_table$`Platelet usage`
   
-  loss <- sum(pred_table$`True Waste`[seq(first_day_waste_seen, last_day_waste_seen)]) +
-    sum((pip::pos(config$penalty_factor - remaining_inventory)^2) [seq(first_day_waste_seen, last_day_waste_seen)]) +
-    sum((pred_table$`True Shortage`^2)[seq(first_day_waste_seen, last_day_waste_seen)])
+  loss <- sum(pred_table$`True Waste`[seq(first_day,last_day)]) +
+    sum((pip::pos(config$penalty_factor - remaining_inventory)^2) [seq(first_day, last_day)]) +
+    sum((pred_table$`True Shortage`^2)[seq(first_day, last_day)])
   
   list(`Real Avg. Daily Loss` = loss / n)
   
@@ -247,7 +249,7 @@ real_loss <- function(pred_table, config) {
 #' @export
 prediction_error <- function(pred_table, config) {
   
-  first_day <- pred_table$date[config$start + 5L]
+  first_day <- pred_table$date[config$start + 6L]
   last_day <- pred_table$date[nrow(pred_table) - 3L]
   
   prediction_error <- list("Overall" = NA, "Pos." = NA, "Neg." = NA,
@@ -289,11 +291,14 @@ prediction_error <- function(pred_table, config) {
 #'         the overall efficacy of the model)
 #' @export
 pred_table_analysis <- function(pred_table, config) {
-  list(pred_start = pred_table$date[config$start + 5L],
-       pred_end = pred_table$date[nrow(pred_table) - 1L],
-       num_days = nrow(pred_table) - config$start - 6L, # effective number of days
-       total_adj_waste = sum(pred_table$`Adj. waste`),
-       total_adj_short = sum(pred_table$`Adj. shortage`),
+  initial_mask <- seq_len(config$start + 5L)
+  final_mask <- (nrow(pred_table) - 2L):nrow(pred_table)
+  
+  list(pred_start = pred_table$date[length(initial_mask) + 1L],
+       pred_end = pred_table$date[final_mask[1L] - 1L],
+       num_days = final_mask[1L] - length(initial_mask) - 1L, # effective number of days
+       total_adj_waste = sum(pred_table$`Adj. waste`[-c(initial_mask, final_mask)]),
+       total_adj_short = sum(pred_table$`Adj. shortage`[-c(initial_mask, final_mask)]),
        proj_loss = projection_loss(pred_table, config),
        real_loss = real_loss(pred_table, config),
        three_day_pred_rmse = prediction_error(pred_table, config))

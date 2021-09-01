@@ -407,14 +407,67 @@ process_all_transfusion_files <- function(data_folder,
         dplyr::arrange(date)
 }
 
-#' Read a single surgery file data and return tibble and summary
+#' Read a single day surgery file data and return tibble and summary
 #' @param filenames the fully qualified path of the 3 files file
 #' @param services the list of surgery types considered as features
 #' @return a list of four items, filename, raw_data (tibble), report a
 #'     list consisting of summary tibble, surgery_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @export
-read_one_surgery_file <- function(filenames, services) {
+read_one_surgery_file <- function(filename, services) {
+    if (length(filename) != 1L){
+        stop("Not enough surgery files found.")
+    }
+    
+    col_types <- list(
+        LOG_ID = readr::col_character(),
+        PAT_ID = readr::col_character(),
+        PAT_MRN_ID = readr::col_character(),
+        SURGEON_NAME = readr::col_character(),
+        OR_SERVICE = readr::col_character(),
+        ROOM_NAME = readr::col_character(),
+        SURGERY_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+        PROC1 = readr::col_character(),
+        PROC2 = readr::col_character(),
+        PROC3 = readr::col_character(),
+        FIRST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+        LAST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+        CASE_CLASS = readr::col_character(),
+        PARENT_HOSPITAL = readr::col_character()
+    )
+    
+    loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing surgery file from", basename(path = filename)))
+    
+    # Bind the 3 future surgery files together
+    raw_data <- readr::read_tsv(file = filename,
+                                    col_names = TRUE,
+                                    col_types = do.call(readr::cols, col_types),
+                                    progress = FALSE)
+    
+    ## Stop if no data
+    if (nrow(raw_data) < 1) {
+        loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
+        stop(sprintf("No data in file %s", filename))
+    }
+    processed_data <- summarize_and_clean_surgery(raw_data, services)
+    if (processed_data$errorCode != 0) {
+        loggit::loggit(log_lvl = "ERROR", log_msg = processed_data$errorMessage)
+        stop(processed_data$errorMessage)
+    }
+    list(filename = filename,
+         raw_data = raw_data,
+         report = list(summary = processed_data$summary),
+         surgery_data = processed_data$data)
+}
+
+#' Read a surgery file data  for following 3 days and return tibble and summary
+#' @param filenames the fully qualified path of the 3 files file
+#' @param services the list of surgery types considered as features
+#' @return a list of four items, filename, raw_data (tibble), report a
+#'     list consisting of summary tibble, surgery_data (tibble)
+#' @importFrom readr cols col_integer col_character col_datetime read_tsv
+#' @export
+read_next_three_surgery_files <- function(filenames, services) {
     if (length(filenames) != 3L){
         stop("Not enough future surgery files found.")
     }
@@ -531,7 +584,7 @@ process_all_surgery_files <- function(data_folder,
                                       pattern = "LAB-BB-CSRP-Surgery*") {
     fileList <- list.files(data_folder, pattern = pattern , full.names = TRUE)
     names(fileList) <- basename(fileList)
-    raw_surgery <- lapply(fileList, read_one_surgery_file, services = services)
+    raw_surgery <- lapply(fileList, read_next_three_surgery_files, services = services)
 
     for (item in raw_surgery) {
         save_report_file(report_tbl = item$report,
@@ -689,7 +742,7 @@ create_dataset <- function(config,
 #' @export
 scale_dataset <- function(dataset, center = NULL, scale = NULL) {
     # make sure scale does not break the model
-    if (!is.null(scale)) scale[scale < 1.0e-12] = 1
+    if (!is.null(scale)) scale[scale < 1.0e-12] <- 1
     
     dataset %>%
         dplyr::select(-.data$date, -.data$plt_used) ->
@@ -817,8 +870,8 @@ process_data_for_date <- function(config,
         census
     
     # Process Surgery data
-    surgery_data <- read_one_surgery_file(surgery_files,
-                                          services = config$surgery_services)
+    surgery_data <- read_next_three_surgery_files(surgery_files,
+                                                  services = config$surgery_services)
     
     save_report_file(report_tbl = surgery_data$report,
                      report_folder = config$report_folder,
@@ -1024,6 +1077,8 @@ predict_for_date <- function(config,
         prev_day <- as.character(as.Date(date, format = "%Y-%m-%d") - 1, format = "%Y-%m-%d")
 
     loggit::loggit(log_lvl = "INFO", log_msg = paste("Step 1. Loading previously processed data on", prev_day))
+    
+    ############## REPLACE WITH DATABASE CALL ######################
     prev_data <- readRDS(file = file.path(config$output_folder,
                                           sprintf(config$output_filename_prefix, prev_day)))
     ## Process data for the date
@@ -1174,7 +1229,7 @@ predict_for_date <- function(config,
                                             start = config$start,
                                             l1_bounds = config$l1_bounds,
                                             lag_bounds = config$lag_bounds)
-        #if (eval) {
+        if (eval) {
             # Take this opportunity to evaluate the model
             pip::evaluate_model(data = data,
                         c0 = config$c0,
@@ -1184,7 +1239,7 @@ predict_for_date <- function(config,
                         start = config$start,
                         l1_bounds = config$l1_bounds,
                         lag_bounds = config$lag_bounds)
-        #}
+        }
         
     } else {
         loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")
@@ -1222,6 +1277,8 @@ predict_for_date <- function(config,
 
     ## Save dataset back for next day
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 6. Save results for next day")
+    
+    ################ REPLACE WITH DATABASE CALL ##########################
     saveRDS(prev_data, file = file.path(config$output_folder,
                                         sprintf(config$output_filename_prefix, date)))
     prediction_df
@@ -1247,6 +1304,8 @@ get_prediction_and_usage <- function(config, start_date, end_date) {
                                pattern = paste0("^",
                                                 substring(config$output_filename_prefix, first = 1, last = 10)),
                                full.names = TRUE)
+    
+    ############## REPLACE WITH DATABASE CALL ###################
     d <- readRDS(tail(output_files, 1L))
     d$dataset %>%
         dplyr::select(.data$date, .data$plt_used) ->
@@ -1261,10 +1320,6 @@ get_prediction_and_usage <- function(config, start_date, end_date) {
 #' @param config the site configuration
 #' @param start_date the starting date in YYYY-mm-dd format
 #' @param end_date the end date in YYYY-mm-dd format, by default today plus 2 days
-#' @param offset the offset to use to line up the initial settings for
-#'     expiry and collection units; default is config$start - 1, which
-#'     matches the usage in training the model, but can be any
-#'     non-negative number less than the number of predictions made
 #' @param generate_report a flag indicating whether a report needs to
 #'     be generated as a side effect
 #' @param min_inventory the minimum that needs to be in inventory,
@@ -1292,6 +1347,8 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     if (length(output_files) == 0) {
         stop(sprintf("No output file found for the prediction end date: %s", as.character(end_date)))
     }
+    
+    ################ REPLACE WITH DATABASE CALL ##################
     d <- readRDS(tail(output_files, 1L))
 
     # IMPORTANT:
@@ -1329,9 +1386,10 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
 
     pred_mat[index, "w"] <- pred_mat[index, "w_adj"] <- pip::pos(initial_expiry_data[1] - y[index])
     pred_mat[index, "r1"] <- pred_mat[index, "r1_adj"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
-    pred_mat[index, "s"] <- pred_mat[index, "s_adj"] <- pip::pos(y[index] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
-    pred_mat[index, "r2"] <- pred_mat[index, "r2_adj"] <- pip::pos(pred_mat[index, "x"] - pip::pos(y[index]- initial_expiry_data[1] - initial_expiry_data[2]))
-    pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1))
+    pred_mat[index, "s"] <- pred_mat[index, "s_adj"] <- pip::pos(y[1] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
+    pred_mat[index, "r2"] <- pred_mat[index, "r2_adj"] <- pip::pos(pred_mat[1, "x"] - pip::pos(y[1]- initial_expiry_data[1] - initial_expiry_data[2]))
+    pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- max(floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1)),
+                                                                    config$c0)
     
     for (i in seq.int(index + 1L, N)) {
         # These are the constraint parameters without adjusting for the minimum inventory
@@ -1339,8 +1397,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
         pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
         pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
         pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
-        pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] 
-                                                   - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1)), config$c0)
+        pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1)), config$c0)
 
         # This set ensures that we have ordered not only enough to satisfy our prediction, but
         # also enough to replenish to our minimum inventory.
