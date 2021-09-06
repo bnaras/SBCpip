@@ -92,6 +92,7 @@ body <- dashboardBody(
                     , textInput(inputId = "cbc_filename_prefix", label = "CBC Files", value = SBCpip::get_SBC_config()$cbc_filename_prefix)
                     , textInput(inputId = "census_filename_prefix", label = "Census Files", value = SBCpip::get_SBC_config()$census_filename_prefix)
                     , textInput(inputId = "transfusion_filename_prefix", label = "Transfusion Files", value = SBCpip::get_SBC_config()$transfusion_filename_prefix)
+                    , textInput(inputId = "surgery_filename_prefix", label = "Surgery Files", value = SBCpip::get_SBC_config()$surgery_filename_prefix)
                     , textInput(inputId = "inventory_filename_prefix", label = "Inventory Files", value = SBCpip::get_SBC_config()$inventory_filename_prefix)
                     , textInput(inputId = "output_filename_prefix", label = "Output Files", value = SBCpip::get_SBC_config()$output_filename_prefix)
                     , textInput(inputId = "log_filename_prefix", label = "Log Files", value = SBCpip::get_SBC_config()$log_filename_prefix)
@@ -104,37 +105,66 @@ body <- dashboardBody(
                     , textInput(inputId = "log_folder", label = "Log Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Logs")
                   )
                 , box(
-                      h3("Model Fitting Parameters")
+                      h3("Inventory Requirements for Model")
                     , sliderInput(inputId = "c0"
-                                , label = "Minimum Remaining Units:"
-                                , min = 5
-                                , max = 100
-                                , value = get_SBC_config()$c0)
-                    , sliderInput(inputId = "min_inventory"
-                                , label = "Minimum Required Inventory Units:"
-                                , min = 20
-                                , max = 100
-                                , value = 30)
-                    , sliderInput(inputId = "history_window"
-                                , label = "History Window:"
-                                , min = 150
-                                , max = 300
-                                , value = 200)
-                    , sliderInput(inputId = "penalty_factor"
-                                , label = "Penalty Factor:"
+                                , label = "Minimum Remaining Fresh Units (units):"
                                 , min = 10
-                                , max = 25
-                                , value = 15)
+                                , max = 50
+                                , value = get_SBC_config()$c0)
+                    ,  sliderInput(inputId = "loss_min_inventory"
+                                , label = "Minimum Total Inventory for Penalty (units):"
+                                , min = 0
+                                , max = 50
+                                , value = 30)
+                    , sliderInput(inputId = "loss_max_inventory"
+                                , label = "Maximum Inventory for Penalty (units):"
+                                , min = 40
+                                , max = 80
+                                , value = 60)
+                    , sliderInput(inputId = "min_inventory" # Can possibly get rid of this
+                                , label = "Minimum Total Inventory for Projection (units):"
+                                , min = 0
+                                , max = 50
+                                , value = 0)
+                )
+                , box(
+                      h3("Other Model Fitting Parameters")
+
+                    , sliderInput(inputId = "history_window"
+                                , label = "History Window (days):"
+                                , min = 100
+                                , max = 300
+                                , value = 100)
                     , sliderInput(inputId = "start"
-                                , label = "Skip Initial:"
+                                , label = "Skip Initial (days):"
                                 , min = 10
                                 , max = 25
                                 , value = 10)
                     , sliderInput(inputId = "model_update_frequency"
-                                , label = "Model Update Frequency:"
+                                , label = "Model Update Frequency (days):"
                                 , min = 7
                                 , max = 30
                                 , value = 7)
+                    , sliderInput(inputId = "penalty_factor"
+                                , label = "Shortage Penalty Factor:"
+                                , min = 0
+                                , max = 20
+                                , value = 5)
+                    , sliderInput(inputId = "l1_bound_min"
+                                , label = "Minimum L1 Bound on Model Coefs:"
+                                , min = 0
+                                , max = 100
+                                , value = 4)
+                    , sliderInput(inputId = "l1_bound_max"
+                                , label = "Maximum L1 Bound on Model Coefs:"
+                                , min = 20
+                                , max = 200
+                                , value = 50)
+                    , sliderInput(inputId = "lag_bound"
+                                , lavel = "Bound on Seven-Day Usage Lag Coef:"
+                                , min = 5
+                                , max = 20
+                                , value = 10)
                   )
               )
               )
@@ -272,6 +302,9 @@ server <- function(input, output, session) {
         set_config_param("history_window", input$history_window)
         set_config_param("penalty_factor", input$penalty_factor)
         set_config_param("model_update_frequency", input$model_update_frequency)
+        set_config_param("l1_bounds", seq(from = input$l1_bound_max, to = input$l1_bound_min, by = -2))
+        set_config_param("lag_bounds", c(NA, input$lag_bound))
+        
         loggit::loggit(log_lvl = "INFO", log_msg = "Settings saved.")
         showNotification("Settings saved.")
     })

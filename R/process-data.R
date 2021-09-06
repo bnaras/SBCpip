@@ -449,7 +449,7 @@ read_one_surgery_file <- function(filename, services) {
         loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
         stop(sprintf("No data in file %s", filename))
     }
-    processed_data <- summarize_and_clean_surgery(raw_data, services)
+    processed_data <- summarize_and_clean_surgery_single_day(raw_data, services)
     if (processed_data$errorCode != 0) {
         loggit::loggit(log_lvl = "ERROR", log_msg = processed_data$errorMessage)
         stop(processed_data$errorMessage)
@@ -505,7 +505,7 @@ read_next_three_surgery_files <- function(filenames, services) {
         loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filenames[1]))
         stop(sprintf("No data in file %s", filenames[1]))
     }
-    processed_data <- summarize_and_clean_surgery(raw_data, services)
+    processed_data <- summarize_and_clean_surgery_next_three_day(raw_data, services)
     if (processed_data$errorCode != 0) {
         loggit::loggit(log_lvl = "ERROR", log_msg = processed_data$errorMessage)
         stop(processed_data$errorMessage)
@@ -526,7 +526,7 @@ read_next_three_surgery_files <- function(filenames, services) {
 #' @importFrom tidyr pivot_wider
 #' @importFrom rlang quo !! .data
 #' @export
-summarize_and_clean_surgery <- function(raw_data, services) {
+summarize_and_clean_surgery_next_three_day <- function(raw_data, services) {
     result <- list(errorCode = 0,
                    errorMessage = "")
 
@@ -561,6 +561,51 @@ summarize_and_clean_surgery <- function(raw_data, services) {
         dplyr::mutate(date = curr_date) -> 
         proc_data -> result$data -> result$summary
 
+    result
+}
+
+#' Summarize and clean the raw surgery data
+#' @param raw_data the raw data tibble
+#' @param services the list of surgery types considered as features
+#' @return a list of four items; errorCode (nonzero if error),
+#'     errorMessage if any, the summary data tibble, the data tibble
+#'     filtered with relevant columns for us
+#' @importFrom dplyr filter mutate select group_by summarize n left_join
+#' @importFrom tidyr pivot_wider
+#' @importFrom rlang quo !! .data
+#' @export
+summarize_and_clean_surgery_single_day <- function(raw_data, services) {
+    result <- list(errorCode = 0,
+                   errorMessage = "")
+    
+    if (any(is.na(raw_data$SURGERY_DATE))) {
+        result$errorCode <- 1
+        result$errorMessage <- "Bad Surgery Date/Time column!"
+        return(result)
+    }
+    
+    # Update this section depending on which features are deemed significant
+    raw_data %>%
+        dplyr::distinct(.data$LOG_ID, .keep_all = TRUE) %>% # There are many repeated log IDs
+        dplyr::mutate(surgery_date = as.Date(.data$SURGERY_DATE),
+                      sched_date = as.Date(.data$FIRST_SCHED_DATE),
+                      case_class = .data$CASE_CLASS,
+                      or_service = factor(x = .data$OR_SERVICE, levels = services)) %>%
+        dplyr::select(.data$surgery_date, 
+                      .data$sched_date, 
+                      .data$case_class, 
+                      .data$or_service) -> filtered_data
+    
+    filtered_data %>%
+        dplyr::group_by(.data$or_service, .drop = FALSE) %>%
+        #dplyr::filter( .data$case_class == "Elective"  ) %>% # Omit urgent for now
+        dplyr::tally() %>%
+        tidyr::pivot_wider(names_from = .data$or_service, 
+                           values_from = .data$n, 
+                           values_fill = 0) %>%
+        dplyr::mutate(date = filtered_data$surgery_date[1]) -> 
+        proc_data -> result$data -> result$summary
+    
     result
 }
 
@@ -847,6 +892,8 @@ process_data_for_date <- function(config,
         dplyr::rename(date = .data$RESULT_DATE) %>%
         dplyr::distinct() ->
         cbc
+    
+    cbc <- create_cbc_features(cbc, config$cbc_quantiles)
 
     # Process Census data
     census_data <- read_one_census_file(census_file,
@@ -909,6 +956,8 @@ process_data_for_date <- function(config,
     } else {
         inventory = NULL
     }
+    
+    
 
     list(cbc = cbc,
          census = census,
@@ -1003,7 +1052,7 @@ summarize_and_clean_inventory <- function(raw_data, date) {
 
     result$summary %>%
         dplyr::filter(!.data$Already_Expired) %>%
-        dplyr::mutate(date = date,
+        dplyr::mutate(date = as.Date(date),
                       Expiry_Time = lubridate::ymd_hms(paste0(.data$`Exp. Date`, ' ', .data$`Exp. Time`, '00'))) %>%
         group_by(.data$date) %>%
         summarize(count = dplyr::n(),
@@ -1151,8 +1200,7 @@ predict_for_date <- function(config,
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3a. Creating CBC features")
 
     ## Create dataset. We add the lag window to avoid NAs at the beginning of the dataset
-    cbc_features <- tail(create_cbc_features(cbc = cbc, cbc_quantiles = config$cbc_quantiles),
-                         config$history_window + config$lag_window + 1L)
+    cbc_features <- tail(cbc, config$history_window + config$lag_window + 1L)
     census <- tail(census, config$history_window + config$lag_window + 1L)
     surgery <- tail(surgery, config$history_window + config$lag_window + 1L)  # need lag_window for smoothing
     transfusion <- tail(transfusion, config$history_window + config$lag_window + 1L) # need lag_window for lag
@@ -1172,7 +1220,7 @@ predict_for_date <- function(config,
     loggit::loggit(log_lvl = "INFO", log_msg = "Step 3b. Creating training/prediction dataset")
 
     # define all variables (this allows mismatch between RDS columns and config)
-    cbc_names <- sapply(config$cbc_vars, function(x) paste0(x, "_Nq"))
+    cbc_names <- unname(sapply(config$cbc_vars, function(x) paste0(x, "_Nq")))
     all_vars <- c("date", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag",
                   cbc_names, 
                   config$census_locations, 
@@ -1226,6 +1274,8 @@ predict_for_date <- function(config,
                                             c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
+                                            lo_inv_limit = config$lo_inv_limit,
+                                            hi_inv_limit = config$hi_inv_limit,
                                             start = config$start,
                                             l1_bounds = config$l1_bounds,
                                             lag_bounds = config$lag_bounds)
@@ -1236,6 +1286,8 @@ predict_for_date <- function(config,
                         train_window = config$history_window - 14L,
                         test_window = 14L,
                         penalty_factor = config$penalty_factor,
+                        lo_inv_limit = config$lo_inv_limit,
+                        hi_inv_limit = config$hi_inv_limit,
                         start = config$start,
                         l1_bounds = config$l1_bounds,
                         lag_bounds = config$lag_bounds)
@@ -1284,6 +1336,233 @@ predict_for_date <- function(config,
     prediction_df
 }
 
+# DB version of single day prediction
+#'
+#' This function updates the saved datasets (therefore, has
+#' side-effects) by reading incremental data for a specified date. The
+#' \code{prev_day} argument can be specified in case the pipeline
+#' fails for some reason to catch up. Note that the default set up is
+#' one where the prediction is made on the morning of day \eqn{i + 1}
+#' for day \eqn{i}.
+#'
+#' @param config the site configuration
+#' @param date the date string for which the data is to be processed in "YYYY-mm-dd" format
+#' @param prev_day the previous date, default NA, which means it is computed from date
+#' @param eval TRUE or FALSE value for whether to evaluate model during predictions
+#' @importFrom pip build_model predict_three_day_sum evaluate_model
+#' @importFrom magrittr %>%
+#' @importFrom dplyr tbl collect rows_upsert filter select distinct copy_to mutate relocate
+#' @importFrom DBI dbIsValid dbListTables
+#' @importFrom tibble tibble
+#' @return a prediction tibble named prediction_df with a column for date and the prediction
+#' @importFrom loggit set_logfile loggit
+#' @export
+predict_for_date_db <- function(conn, config,
+                                date = as.character(Sys.Date(), format = "%Y-%m-%d"),
+                                prev_day = NA,
+                                eval = FALSE) {
+    
+    if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
+    
+    ## Previous date is one day before unless specified explicity
+    if (is.na(prev_day))
+        prev_day <- as.character(as.Date(date, format = "%Y-%m-%d") - 1, format = "%Y-%m-%d")
+    date_diff <- as.integer(as.Date(date) - as.Date(prev_day))
+    
+    ## Step 1. Process data for the new date
+    result <- process_data_for_date(config = config, date = date) # from a file
+    db_tablenames <- DBI::dbListTables(conn)
+    if (length(intersect(names(result), db_tablenames)) != length(names(result))) {
+        stop("Mismatch between new data sources and existing sources in DB.")
+    }
+    
+    ## Step 2. Check to make sure that the newly processed data contains only one date/row
+    multiple_dates_in_increment <- FALSE
+    
+    for (i in seq_along(result)) {
+        unique_dates <- unique(result[i]$data)
+        if (length(unique_dates) > 1L) {
+            loggit::loggit(log_lvl = "WARN", log_msg = sprintf("Multiple dates in %s file, model retraining forced!", 
+                                                               names(result)[i]))
+            loggit::loggit(log_lvl = "WARN", log_msg = unique_dates)
+            multiple_dates_in_increment <- TRUE
+        }
+    }
+    
+    # Step 3. Define all variables based on current config (this allows mismatch between database columns and config)
+    cbc_names <- unname(sapply(config$cbc_vars, function(x) paste0(x, "_Nq")))
+    all_vars <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag",
+                  cbc_names, 
+                  config$census_locations, 
+                  config$surgery_services)
+    all_cols <- c("date", all_vars, "plt_used")
+    
+    # Step 4. Load required data from database and "upsert" the new rows for each table
+    # (Note: This assumes that the previously processed data and the new data have the same number of
+    # columns with potentially different names)
+    updated_data <- vector("list", length(result))
+    names(updated_data) <- names(result) 
+    
+    first_day_train <- as.Date(prev_day) - (config$history_window + config$lag_window)
+    first_day_test <- as.Date(prev_day)
+    
+    for (i in seq_along(result)) {
+        
+        table_name <- names(updated_data)[i]
+        db_table <- conn %>% 
+            dplyr::tbl(table_name) %>% 
+            dplyr::collect()
+        
+        # Note that the upsert function is experimental. May need to replace with manual workaround
+        
+        updated_data[[table_name]] <- db_table %>% 
+            dplyr::rows_upsert(result[[table_name]], by = c("date")) %>%
+            dplyr::filter(date >= first_day_train & date <= first_day_test)
+    }
+    
+    # Add the transfusion information to the inventory [?? does this need to happen here?]
+    #updated_data$inventory %>% 
+    #  dplyr::mutate(date = as.Date(.data$date)) %>% # converting from dttm to date (not sure why it is a datetime)
+    #  dplyr::left_join(updated_data$transfusion, by="date") %>%
+    #  dplyr::mutate(collection = dplyr::lead(.data$count, 1) - 
+    #                  .data$count + .data$used + 
+    #                  pip::pos(.data$r1 - .data$used)) %>% # Amt collected
+    #  dplyr::mutate(expiry1 = .data$r1 + .data$r2) %>% # Expiring in 1 day
+    #  dplyr::mutate(expiry2 = .data$r3_plus) -> inventory
+    #result$inventory <- updated_data$inventory %>% filter(date == as.Date(prev_day))
+    
+    # Step 5. Create the combined dataset
+    dataset <- create_dataset(config,
+                              cbc_features = updated_data$cbc,
+                              census = updated_data$census,
+                              surgery = updated_data$surgery,
+                              transfusion = updated_data$transfusion) %>% 
+        dplyr::select(all_of(all_cols))
+    
+    recent_data <- tail(dataset, n = config$history_window + 1L)
+    training_data <- head(recent_data, n = config$history_window)
+    new_data <- tail(recent_data, n = 1L)
+    
+    # Step 6. Determine whether model needs to be updated (config changed or outdated)
+    model_row <- list(age = 0L)
+    model_exists <- "model" %in% db_tablenames
+    if (model_exists) {
+        model_tbl <- conn %>% dplyr::tbl("model") %>% 
+            dplyr::collect() # Note - must have collect statement (otherwise R aborts)
+        model_df <- as.data.frame(model_tbl) 
+        model_row <- model_df %>% 
+            dplyr::filter(date == as.Date(prev_day)) %>% 
+            dplyr::distinct()
+        colnames(model_row) <- c("date", "intercept", all_vars, "l1_bound", "lag_bound", "age")
+    }
+    
+    model_needs_updating <- (multiple_dates_in_increment || 
+                                 (nrow(model_row) == 0L) ||
+                                 (model_row$age %% config$model_update_frequency == 0L) ||
+                                 (date_diff > config$model_update_frequency))
+    
+    # Step 7. Scale the dataset and retrain the model as needed
+    scaled_dataset <- NULL
+    model <- list(l1_bound = NA, lag_bound = NA, coefs = NULL, w = NULL, r = NULL, s = NULL)
+    
+    if (model_needs_updating) {
+        
+        ## Provide informative log
+        if (multiple_dates_in_increment) {
+            loggit::loggit(log_lvl = "INFO", log_msg = "Multiple dates in data increment, so model training forced")
+        } else {
+            loggit::loggit(log_lvl = "INFO", log_msg = "Model is stale, so updating model")
+        }
+        
+        scaled_dataset <- scale_dataset(training_data) # rescale
+        
+        # ensure that no NA values are fed into build_model
+        data <- as.data.frame(scaled_dataset$scaled_data, optional = TRUE)
+        if (sum(is.na(data)) > 0) {
+            data[is.na(data)] <- 0
+            loggit::loggit(log_lvl = "WARN", log_msg ='Warning: NA values found in scaled dataset - replacing with 0')
+        }
+        
+        model <- pip::build_model(data = data,
+                                  c0 = config$c0,
+                                  history_window = config$history_window,
+                                  penalty_factor = config$penalty_factor,
+                                  start = config$start,
+                                  l1_bounds = config$l1_bounds,
+                                  lag_bounds = config$lag_bounds)
+        
+        # Create a new row for model_df
+        model_row <- as.data.frame(t(model$coefs))
+        names(model_row) <- names(model$coefs)
+        model_row <- model_row %>% 
+            dplyr::mutate(date = as.Date(date), 
+                          l1_bound = model$l1_bound, 
+                          lag_bound = model$lag_bound,
+                          age = 1L) %>% 
+            dplyr::relocate(date)
+        
+        
+    } else {
+        loggit::loggit(log_lvl = "INFO", log_msg = "Using previous model and scaling")
+        
+        # Load previous scaling and model
+        prev_scaling <- conn %>% dplyr::tbl("data_scaling") %>% dplyr::collect()
+        
+        scaled_dataset <- scale_dataset(training_data,
+                                        center = prev_scaling$center,
+                                        scale = prev_scaling$scale)
+        
+        # Convert model data.frame row into model "object" for prediction
+        model$l1_bound <- model_row$l1_bound
+        model$lag_bound <- model_row$lag_bound
+        model$coefs <- as.numeric(model_row %>% dplyr::select(-c(l1_bound, lag_bound, date, age)))
+        names(model$coefs) <- setdiff(colnames(model_row), c("date", "l1_bound", "lag_bound", "age"))
+        
+        #Update the date and model age
+        model_row$date <- as.Date(date)
+        model_row$age <- model_row$age + 1L
+    }
+    
+    # Step 9. Scale the new data based on updated or previous scaling
+    new_scaled_data <- scale_dataset(new_data,
+                                     center = scaled_dataset$center,
+                                     scale = scaled_dataset$scale)$scaled_data
+    
+    
+    # Step 10. Predict the total platelet usage for the next 3 days
+    prediction <- pip::predict_three_day_sum(model = model,
+                                             new_data = as.data.frame(new_scaled_data, optional=TRUE)) ## last row is what we  want to predict for
+    
+    
+    # Make sure prediction is returning a valid response. No point in continuing otherwise.
+    if (is.nan(prediction)) {
+        stop(sprintf("Next three day prediction returned NaN for %s", date))
+    }
+    
+    prediction_df <- tibble::tibble(date = new_data$date, t_pred = prediction)
+    
+    # Step 11. Update the database with the new data
+    # We care about preserving old model parameters, so we insert (duckdb does not support upsert)
+    if (!model_exists) {
+        conn %>% DBI::dbWriteTable("model", model_row)
+    } else {
+        conn %>% upsert_db("model", model_row, by = "date")
+    }
+    
+    # Simply replace the previous scaling (meed 2 separate tables for center and scaling at this rate)
+    conn %>% dplyr::copy_to(df = data.frame(scaled_dataset[c("center", "scale")]), 
+                            name = "data_scaling",
+                            overwrite = TRUE)
+    
+    # Upsert new data
+    for (i in seq_along(result)) {
+        table_name <- names(updated_data)[i]
+        conn %>% upsert_db(table_name, result[[table_name]], by = "date")
+    }
+    
+    prediction_df
+}
+
 #' Get the actual prediction and platelet usage data from saved files for each date
 #'
 #' This function reads a saved dataset and returns a tibble with a
@@ -1315,152 +1594,36 @@ get_prediction_and_usage <- function(config, start_date, end_date) {
         dplyr::left_join(d$prediction_df, by = "date")
 }
 
-#' Given the configuration and prediction data frame, build a prediction table
+
+#' Helper Database upsert function
 #'
-#' @param config the site configuration
-#' @param start_date the starting date in YYYY-mm-dd format
-#' @param end_date the end date in YYYY-mm-dd format, by default today plus 2 days
-#' @param generate_report a flag indicating whether a report needs to
-#'     be generated as a side effect
-#' @param min_inventory the minimum that needs to be in inventory,
-#'     by default what was used in the training, which is config$c0.
-#' @return a tibble of several variables, including all columns of
-#'     prediction_df, plus units expiring in a day (r1), units
-#'     expiring in 2 days (r2), waste (w), collection units (x),
-#'     shortage (s) and y prediction and the platelet usage for that
-#'     date, suggested values in case of inventory minimum is not met,
-#'     inventory columns if available
+#' @param conn the database connection object
+#' @param df_name string name of the database table
+#' @param new_row new complete row to add to the database table (data.frame)
+#' @param by string name of column by which to match rows (default to date for this use case)
 #' @importFrom magrittr %>%
-#' @importFrom rlang .data
-#' @importFrom dplyr select left_join lead
-#' @importFrom tibble as_tibble
+#' @importFrom dplyr tbl collect
+#' @importFrom DBI dbExecute
 #' @export
-build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2, generate_report = TRUE,
-                                   offset = config$start - 1,
-                                   min_inventory = config$min_inventory) {
-    dates <- seq.Date(from = start_date, to = end_date, by = 1)
-    output_files <- list.files(path = config$output_folder,
-                               pattern = paste0("^",
-                                                sprintf(config$output_filename_prefix, as.character(end_date))),
-                               full.names = TRUE)
-
-    if (length(output_files) == 0) {
-        stop(sprintf("No output file found for the prediction end date: %s", as.character(end_date)))
+upsert_db <- function(conn, df_name, new_row, by = "date") {
+    
+    if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
+    
+    tbl <- conn %>% dplyr::tbl(df_name) %>% dplyr::collect()
+    if (ncol(tbl) < ncol(new_row)) {
+        stop("Column names in new entry do not match column names in database table.")
     }
     
-    ################ REPLACE WITH DATABASE CALL ##################
-    d <- readRDS(tail(output_files, 1L))
-
-    # IMPORTANT:
-    # d$dataset only includes the "history_window" used to retrain the model + 7 days
-    # d$prediction_df includes all dates in the prediction range
-    # d$transfusion, d$census, etc. include all seed dates + prediction dates
-    d2 <- tail(d$transfusion, nrow(d$prediction_df)) %>%
-        rename(plt_used = used) %>% distinct(date, .keep_all = TRUE)
-
-    # Important to replace plt_used and t_pred NA values with 0
-    tibble::tibble(date = dates) %>%
-        dplyr::left_join(d2, by = "date") %>%
-        dplyr::left_join(d$prediction_df, by = "date") %>%
-        distinct(date, .keep_all = TRUE) %>%
-        tidyr::replace_na(list(plt_used = 0, t_pred = 0)) ->
-        prediction_df
-
-    N <- nrow(prediction_df)
-    if (offset >= N) {
-        loggit::loggit(log_lvl = "ERROR", log_msg = "Not enough predictions!")
-        stop("Not enough predictions!")
-    }
-
-    y <- prediction_df$plt_used
-    t_pred <- prediction_df$t_pred
-    initial_expiry_data <- config$initial_expiry_data
-    pred_mat <- matrix(0, nrow = N + 3, ncol = 11)
-    colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s", #"t_adj",
-                            "r1_adj", "r2_adj","w_adj", "x_adj", "s_adj")
-
-    pred_mat[offset + (1:3), "x"] <- config$initial_collection_data
-    pred_mat[offset + (1:3), "x_adj"] <- config$initial_collection_data
-    index <- offset + 1
-    #t_adj <- t_pred
-
-    pred_mat[index, "w"] <- pred_mat[index, "w_adj"] <- pip::pos(initial_expiry_data[1] - y[index])
-    pred_mat[index, "r1"] <- pred_mat[index, "r1_adj"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
-    pred_mat[index, "s"] <- pred_mat[index, "s_adj"] <- pip::pos(y[1] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
-    pred_mat[index, "r2"] <- pred_mat[index, "r2_adj"] <- pip::pos(pred_mat[1, "x"] - pip::pos(y[1]- initial_expiry_data[1] - initial_expiry_data[2]))
-    pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- max(floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1)),
-                                                                    config$c0)
+    insert_command <- sprintf("INSERT INTO %s VALUES (%s)", 
+                              df_name, paste(rep("?", ncol(new_row)), collapse = ", "))
     
-    for (i in seq.int(index + 1L, N)) {
-        # These are the constraint parameters without adjusting for the minimum inventory
-        pred_mat[i, "w"] <- pip::pos(pred_mat[i - 1 , "r1"] - y[i])
-        pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
-        pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
-        pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
-        pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1)), config$c0)
-
-        # This set ensures that we have ordered not only enough to satisfy our prediction, but
-        # also enough to replenish to our minimum inventory.
-        pred_mat[i, "w_adj"] <- pip::pos(pred_mat[i - 1 , "r1_adj"] - y[i])
-        pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
-        pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
-        pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
-        pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) 
-                                                    - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"] + 1)), config$c0)
-        # Why do we adjust the 3 day usage prediction? This seems independent of the inventory.
-        #t_adj[i] = t_adj[i] + pip::pos(min_inventory - pred_mat[i,"r1"] - pred_mat[i,"r2"])
+    row_exists <- new_row[[by]] %in% tbl[[by]]
+    
+    if (!row_exists) {
+        DBI::dbExecute(conn, insert_command, as.list(new_row))
+    } else {
+        DBI::dbExecute(conn, sprintf("DELETE FROM %s WHERE %s = '%s'", df_name, by, as.character(new_row[[by]])))
+        DBI::dbExecute(conn, insert_command, as.list(new_row))
     }
-    #pred_mat[1:N,"t_adj"] = t_adj
-
-    pred_mat[, "Alert"] <- (pred_mat[, "r1"] + pred_mat[, "r2"] <= min_inventory)
-
-    d$inventory %>%     ## Drop the time part!
-        dplyr::mutate(date = as.Date(date)) ->
-        inventory
-
-    tibble::as_tibble(cbind(prediction_df, pred_mat[seq_len(N), ])) %>%
-        dplyr::mutate(t_true = dplyr::lead(plt_used, 1L) + dplyr::lead(plt_used, 2L) + dplyr::lead(plt_used, 3L)
-                      ) %>%
-        dplyr::relocate(t_true, .after = plt_used) %>%
-        dplyr::left_join(inventory, by = "date") ->
-        pred_table
-
-    names(pred_table) <- c("date",
-                           "Platelet usage",
-                           "Three-day actual usage",
-                           "Three-day prediction",
-                           "Alert",
-                           "No. expiring in 1 day",
-                           "No. expiring in 2 days",
-                           "Waste",
-                           "No. to order per prediction",
-                           "Shortage",
-                           "Adj. no. expiring in 1 day",
-                           "Adj. no. expiring in 2 days",
-                           "Adj. waste",
-                           "Adj. no. to order",
-                           "Adj. shortage",
-                           "Inv. count",
-                           "Inv. expiring in 1 day",
-                           "Inv. expiring in 2 days",
-                           "Inv. expiring in 2+ days")
-
-    # Compute "true" values for waste, fresh orders, and shortage
-    pred_table %>%
-        dplyr::mutate(`True Waste` = pip::pos(`Inv. expiring in 1 day` - `Platelet usage`)) %>%
-        dplyr::mutate(`Fresh Units Ordered` = lead(`Inv. count`, 1) - `Inv. count` +
-                          `Platelet usage` + `True Waste`) %>%
-        dplyr::mutate(`True Shortage` = pip::pos(`Platelet usage` - `Inv. count` - `Fresh Units Ordered`)) ->
-        pred_table
-
-    if (generate_report) {
-        todays_date <- as.character(Sys.Date(), format = "%Y-%m-%d")
-        filename <- sprintf("prediction-report-%s", todays_date)
-        save_report_file(report_tbl = pred_table,
-                         report_folder = config$report_folder,
-                         filename = filename)
-    }
-
-    pred_table
 }
 

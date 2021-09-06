@@ -39,7 +39,9 @@ SBC_config <- function() {
         c0 = 15, ## value for c0 to use in training model
         min_inventory = 30, ## the minimum inventory
         history_window = 200,  ## how many days to use in training
-        penalty_factor = 15,   ## penalty factor to use in training
+        penalty_factor = 5,   ## penalty factor to use in training
+        lo_inv_limit = 30,    ## inventory count below which we penalize result 
+        hi_inv_limit = 60,    ## inventory count above which we penalize result
         start = 10, ## the day we start the model evaluation
         initial_collection_data = c(60, 60, 60), ## the initial number that will be collected for the first three days
         initial_expiry_data = c(0, 0), ## the number of units that expire a day after, and two days after respectively

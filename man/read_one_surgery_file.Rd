@@ -2,19 +2,19 @@
 % Please edit documentation in R/process-data.R
 \name{read_one_surgery_file}
 \alias{read_one_surgery_file}
-\title{Read a single surgery file data and return tibble and summary}
+\title{Read a single day surgery file data and return tibble and summary}
 \usage{
-read_one_surgery_file(filenames, services)
+read_one_surgery_file(filename, services)
 }
 \arguments{
-\item{filenames}{the fully qualified path of the 3 files file}
-
 \item{services}{the list of surgery types considered as features}
+
+\item{filenames}{the fully qualified path of the 3 files file}
 }
 \value{
 a list of four items, filename, raw_data (tibble), report a
     list consisting of summary tibble, surgery_data (tibble)
 }
 \description{
-Read a single surgery file data and return tibble and summary
+Read a single day surgery file data and return tibble and summary
 }
