@@ -1,11 +1,16 @@
 library(shiny)
 library(shinydashboard)
+library(shinyalert)
 library(SBCpip)
 library(tidyverse)
 library(gridExtra)
 library(bibtex)
+library(DBI)
+library(duckdb)
 
 paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", package = "SBCpip"))
+db_path <- "/Users/kaiokada/Desktop/Research/pip.duckdb"
+data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
 
 intro_line_1 <- 'An application implementing the method described by'
 intro_line_2 <- a(href = sprintf("https://doi.org/%s", paper_citation$doi),
@@ -22,15 +27,6 @@ gg_color_hue <- function(n) {
 
 cols <- gg_color_hue(3L)
 
-## set_config_param(param = "output_folder",
-##                  value = "/Users/naras/R/packages/platelet-data/Blood_Center_Outputs")
-## set_config_param(param = "log_folder",
-##                  value = "/Users/naras/R/packages/platelet-data/Blood_Center_Logs")
-## set_config_param(param = "report_folder",
-##                  value = "/Users/naras/R/packages/platelet-data/Blood_Center_Reports")
-## config <- set_config_param(param = "data_folder",
-##                            value = "/Users/naras/R/packages/platelet-data/Blood_Center_inc")
-
 sidebar <- dashboardSidebar(
     sidebarMenu(
         id = "tabId"
@@ -38,7 +34,8 @@ sidebar <- dashboardSidebar(
       , menuItem("Settings", tabName = "settings", icon = icon("wrench"))
       , conditionalPanel(
             condition = "input.tabId == 'settings'"
-          , actionButton(inputId = "setValues", label = "Apply")
+          , actionButton(inputId = "setValues", label = "Apply Settings")
+          , actionButton(inputId = "buildDatabase", label = "Reset Database")
         )
       , menuItem("Predict for Today", icon = icon("caret-right"), tabName = "prediction")
       , conditionalPanel(
@@ -49,24 +46,30 @@ sidebar <- dashboardSidebar(
       , menuItem("Reports", icon = icon("table")
                , menuSubItem("CBC Summary", tabName = "cbc")
                , conditionalPanel(
-                     condition = "input.tabId == 'cbc'"
-                   , dateInput("cbcDate", label = "Date", value = as.character(Sys.Date()))
-                   , actionButton("cbcSummaryButton", "Summarize")
+                 condition = "input.tabId == 'cbc'"
+                 , dateInput("cbcDate", label = "Date", value = as.character(Sys.Date()))
+                 , actionButton("cbcSummaryButton", "Summarize")
                  )
                , menuSubItem("Census Summary", tabName = "census")
                , conditionalPanel(
-                     condition = "input.tabId == 'census'"
-                   , dateInput("censusDate", label = "Date", value = as.character(Sys.Date()))
-                   , actionButton("censusSummaryButton", "Summarize")
+                 condition = "input.tabId == 'census'"
+                 , dateInput("censusDate", label = "Date", value = as.character(Sys.Date()))
+                 , actionButton("censusSummaryButton", "Summarize")
+                 )
+               , menuSubItem("Surgery Summary", tabName = "surgery")
+               , conditionalPanel(
+                 condition = "input.tabId == 'surgery'"
+                 , dateInput("surgeryDate", label = "Date", value = as.character(Sys.Date()))
+                 , actionButton("surgerySummaryButton", "Summarize")
                  )
                , menuSubItem("Prediction Summary", tabName = "predictionSummary")
                , conditionalPanel(
-                     condition = "input.tabId == 'predictionSummary'"
-                   , dateInput("startDate", label = "Start Date", value = "2018-04-10")
-                   , dateInput("endDate", label = "End Date", value = as.character(Sys.Date()))
-                   , actionButton("predictionSummaryButton", "Summarize")
+                 condition = "input.tabId == 'predictionSummary'"
+                 , dateInput("startDate", label = "Start Date", value = "2018-04-10")
+                 , dateInput("endDate", label = "End Date", value = as.character(Sys.Date()))
+                 , actionButton("predictionSummaryButton", "Summarize")
                  )
-                 )
+               )
       , menuItem("Plots", icon = icon("bar-chart-o"), tabName = "modelPlots")
               ## , menuSubItem("Model Performance", tabName = "modelPlots")
               ## , menuSubItem("Model vs. Inventory", tabName = "modelVsInventoryPlots")
@@ -78,66 +81,67 @@ sidebar <- dashboardSidebar(
 
 body <- dashboardBody(
   tabItems(
-      tabItem(tabName = "dashboard"
+    tabItem(tabName = "dashboard"
             , h2("Platelet Inventory Prediction")
             , p(em(intro_line_1, intro_line_2))
             , h3("Abstract")
             , p(paper_citation$abstract)
-              )
+            )
     , tabItem(tabName = "settings"
-            , fluidRow(
-                  h2("Configuration Settings")
+              , fluidRow(
+                h2("Configuration Settings")
                 , box(
-                      h3("Filename Patterns (%s is YYYY-mm-dd)")
-                    , textInput(inputId = "cbc_filename_prefix", label = "CBC Files", value = SBCpip::get_SBC_config()$cbc_filename_prefix)
-                    , textInput(inputId = "census_filename_prefix", label = "Census Files", value = SBCpip::get_SBC_config()$census_filename_prefix)
-                    , textInput(inputId = "transfusion_filename_prefix", label = "Transfusion Files", value = SBCpip::get_SBC_config()$transfusion_filename_prefix)
-                    , textInput(inputId = "surgery_filename_prefix", label = "Surgery Files", value = SBCpip::get_SBC_config()$surgery_filename_prefix)
-                    , textInput(inputId = "inventory_filename_prefix", label = "Inventory Files", value = SBCpip::get_SBC_config()$inventory_filename_prefix)
-                    , textInput(inputId = "output_filename_prefix", label = "Output Files", value = SBCpip::get_SBC_config()$output_filename_prefix)
-                    , textInput(inputId = "log_filename_prefix", label = "Log Files", value = SBCpip::get_SBC_config()$log_filename_prefix)
+                  h3("Input and Output Locations")
+                  , textInput(inputId = "data_folder", label = "Data Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_inc/")
+                    #, textInput(inputId = "report_folder", label = "Report Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Reports")
+                    #, textInput(inputId = "output_folder", label = "Output Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Outputs")
+                  , textInput(inputId = "log_folder", label = "Log Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Logs/")
+                #  )
+                , #box(
+                  h3("Filename Patterns")
+                  , textInput(inputId = "cbc_filename_prefix", label = "CBC Files", value = SBCpip::get_SBC_config()$cbc_filename_prefix)
+                  , textInput(inputId = "census_filename_prefix", label = "Census Files", value = SBCpip::get_SBC_config()$census_filename_prefix)
+                  , textInput(inputId = "transfusion_filename_prefix", label = "Transfusion Files", value = SBCpip::get_SBC_config()$transfusion_filename_prefix)
+                  , textInput(inputId = "surgery_filename_prefix", label = "Surgery Files", value = SBCpip::get_SBC_config()$surgery_filename_prefix)
+                  , textInput(inputId = "inventory_filename_prefix", label = "Inventory Files", value = SBCpip::get_SBC_config()$inventory_filename_prefix)
+                    #, textInput(inputId = "output_filename_prefix", label = "Output Files", value = SBCpip::get_SBC_config()$output_filename_prefix)
+                  , textInput(inputId = "log_filename_prefix", label = "Log Files", value = SBCpip::get_SBC_config()$log_filename_prefix)
                   )
+                
                 , box(
-                      h3("Input and Output Locations")
-                    , textInput(inputId = "data_folder", label = "Data Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_inc")
-                    , textInput(inputId = "report_folder", label = "Report Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Reports")
-                    , textInput(inputId = "output_folder", label = "Output Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Outputs")
-                    , textInput(inputId = "log_folder", label = "Log Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Logs")
-                  )
-                , box(
-                      h3("Inventory Requirements for Model")
-                    , sliderInput(inputId = "c0"
-                                , label = "Minimum Remaining Fresh Units (units):"
+                  h3("Inventory Requirements for Model")
+                  , sliderInput(inputId = "c0"
+                                , label = "Minimum Remaining Fresh Units at EOD - c0 (units):"
                                 , min = 10
                                 , max = 50
                                 , value = get_SBC_config()$c0)
-                    ,  sliderInput(inputId = "loss_min_inventory"
-                                , label = "Minimum Total Inventory for Penalty (units):"
+                  , sliderInput(inputId = "loss_inventory_range"
+                                , label = "Acceptable Inventory for Loss Penalty (units):"
                                 , min = 0
-                                , max = 50
-                                , value = 30)
-                    , sliderInput(inputId = "loss_max_inventory"
-                                , label = "Maximum Inventory for Penalty (units):"
-                                , min = 40
-                                , max = 80
-                                , value = 60)
-                    , sliderInput(inputId = "min_inventory" # Can possibly get rid of this
-                                , label = "Minimum Total Inventory for Projection (units):"
+                                , max = 100
+                                , value = c(get_SBC_config()$lo_inv_limit, get_SBC_config()$hi_inv_limit))
+                  , sliderInput(inputId = "penalty_factor"
+                                , label = "Shortage Penalty Factor (X unit Wasted : 1 units Short):"
                                 , min = 0
-                                , max = 50
-                                , value = 0)
-                )
-                , box(
+                                , max = 20
+                                , value = 5)
+                  #, sliderInput(inputId = "min_inventory" # Can possibly get rid of this
+                  #              , label = "Minimum Total Inventory for Projection (units):"
+                  #              , min = 0
+                  #              , max = 50
+                  #              , value = get_SBC_config()$min_inventory)
+                 #  )
+                , #box(
                       h3("Other Model Fitting Parameters")
 
                     , sliderInput(inputId = "history_window"
                                 , label = "History Window (days):"
-                                , min = 100
+                                , min = 50
                                 , max = 300
                                 , value = 100)
                     , sliderInput(inputId = "start"
                                 , label = "Skip Initial (days):"
-                                , min = 10
+                                , min = 5
                                 , max = 25
                                 , value = 10)
                     , sliderInput(inputId = "model_update_frequency"
@@ -145,29 +149,20 @@ body <- dashboardBody(
                                 , min = 7
                                 , max = 30
                                 , value = 7)
-                    , sliderInput(inputId = "penalty_factor"
-                                , label = "Shortage Penalty Factor:"
+                    , sliderInput(inputId = "l1_bound_range"
+                                , label = "Range of L1 Bounds on Model Coefs:"
                                 , min = 0
-                                , max = 20
-                                , value = 5)
-                    , sliderInput(inputId = "l1_bound_min"
-                                , label = "Minimum L1 Bound on Model Coefs:"
-                                , min = 0
-                                , max = 100
-                                , value = 4)
-                    , sliderInput(inputId = "l1_bound_max"
-                                , label = "Maximum L1 Bound on Model Coefs:"
-                                , min = 20
                                 , max = 200
-                                , value = 50)
+                                , value = c(2, 50))
                     , sliderInput(inputId = "lag_bound"
-                                , lavel = "Bound on Seven-Day Usage Lag Coef:"
+                                , label = "Bound on Seven-Day Usage Lag Coef:"
                                 , min = 5
                                 , max = 20
                                 , value = 10)
-                  )
+                    )
+                )
               )
-              )
+    # Hide the below items until the settings have been applied
     , tabItem(tabName = "prediction"
             , h2("Prediction Result")
             , tableOutput("predictionResult")
@@ -181,6 +176,10 @@ body <- dashboardBody(
     , tabItem(tabName = "census"
             , h2("Census Summary")
             , tableOutput("censusSummary")
+              )
+    , tabItem(tabName = "surgery"
+              , h2("Surgery Summary")
+              , tableOutput("surgerySummary")
               )
     , tabItem(tabName = "predictionSummary"
             , h2("Prediction Table")
@@ -200,6 +199,8 @@ dbHeader$children[[2]]$children <-  tags$a(href='https://stanfordbloodcenter.org
                                                     alt = 'Stanford Blood Center Dashboard', height = '40'))
 ##dbHeader
 
+
+
 ui <- dashboardPage(
     title = "SBC Dashboard",
     ##dashboardHeader(title = "Stanford Blood Center")
@@ -209,105 +210,184 @@ ui <- dashboardPage(
   , skin = "green"
 )
 
+# Helper function to fetch data for a certain date, or return that no data can be located
+fetch_data_for_date <- function(req_date, table_name) {
+  # Connect to duckdb database hosted on a local file
+  db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = TRUE)
+  if (!(table_name %in% DBI::dbListTables(db))) {
+    return(sprintf("Data table %s is not available in database. Make sure to run 'Settings' >> 'Apply Settings' and 'Settings' >> 'Reset Database' first.", 
+                   table_name))
+  }
+  full_tbl <- db %>% dplyr::tbl(table_name) %>% dplyr::collect()
+  DBI::dbDisconnect(db, shutdown = TRUE)
+  
+  # If the database does not contain data for the requested date, process on the fly
+  if (!(req_date %in% full_tbl$date))
+    full_tbl <- tryCatch(SBCpip::process_data_for_date(SBCpip::get_SBC_config(), 
+                                                       as.character(as.Date(req_date) + 1))[[table_name]],
+                         error = function(e) { 
+                           print(e)
+                           NULL
+                           })
+  if (is.null(full_tbl)) {
+    return("Some or all data files are unavailable for the requested date.")
+  }
+  
+  tbl <- full_tbl %>% dplyr::ungroup() %>%
+    dplyr::filter(date == as.Date(req_date)) %>%
+    tidyr::pivot_longer(-c(date), names_to = "var", values_to = "count") %>%
+    dplyr::select(var, count)
+  tbl
+}
+
 server <- function(input, output, session) {
-
-    observeEvent(input$exitApp, {
-        stopApp(TRUE)
+  
+  # Exit the app
+  observeEvent(input$exitApp, {
+    stopApp(TRUE)
+  })
+  
+  # Save parameters from settings panel to config.
+  observeEvent(input$setValues, {
+    # Folder names
+    set_config_param("data_folder", input$data_folder)
+    set_config_param("log_folder", input$log_folder)
+    
+    # File prefixes
+    set_config_param("cbc_filename_prefix", input$cbc_filename_prefix)
+    set_config_param("census_filename_prefix", input$census_filename_prefix)
+    set_config_param("surgery_filename_prefix", input$surgery_filename_prefix)
+    set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
+    set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
+    
+    # Inventory parameters
+    set_config_param("c0", input$c0) # for training and cross-validation
+    set_config_param("lo_inv_limit", input$loss_inventory_range[1]) # for loss function
+    set_config_param("hi_inv_limit", input$loss_inventory_range[2]) # for loss function
+    set_config_param("min_inventory", 0) # for prediction table building
+    set_config_param("penalty_factor", input$penalty_factor)
+    
+    # Other model/prediction/validation parameters
+    set_config_param("history_window", input$history_window)
+    set_config_param("start", input$start)
+    set_config_param("model_update_frequency", input$model_update_frequency)
+    set_config_param("l1_bounds", seq(from = input$l1_bound_range[2], to = input$l1_bound_range[1], by = -2))
+    set_config_param("lag_bounds", c(-1, input$lag_bound))
+    
+    loggit::loggit(log_lvl = "INFO", log_msg = "Settings saved.")
+    
+    showNotification("Settings saved.")
+  })
+  
+  # Build the full database using files in config$data_folder.
+  observeEvent(input$buildDatabase, {
+    
+    loggit::loggit(log_lvl = "INFO", log_msg = "Building database")
+    config <- SBCpip::get_SBC_config()
+    
+    n_files <- length(list.files(config$data_folder))
+    
+    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    on.exit({
+      if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
+    }, add = TRUE)
+    
+    showModal(modalDialog(sprintf("Building DuckDB database based on all available files in %s. 
+                                    Estimated total time is %d minutes", config$data_folder, floor(n_files / 400)),
+                          footer = NULL))
+    date_range <- tryCatch(db %>% sbc_build_and_save_full_db(config), error = function(e) {
+      shinyalert("Oops!", e, type = "error")
+      NULL
     })
-
-    output$cbcSummary <- renderTable({
-        ## Take dependency on button
-        input$cbcSummaryButton
-        isolate({
-            config <- SBCpip::get_SBC_config()
-            filename_prefix <- sprintf(config$cbc_filename_prefix, as.character(input$cbcDate))
-            filenames <- list.files(path = config$report_folder, pattern = filename_prefix, full.names = TRUE)
-            ##print(filenames)
-            ## Should only be one, in any case, we use the last
-            if (length(filenames) > 0) {
-                readxl::read_xlsx(tail(filenames, 1), sheet = 2) %>%
-                    dplyr::select(-RESULT_DATE)
-            }
-        })
+    DBI::dbDisconnect(db, shutdown = TRUE)
+    removeModal()
+    if (is.null(date_range)) return()
+    showModal(modalDialog(sprintf("Database build finished! Initial Date: %s -- Final Date: %s", 
+                                  date_range[1], date_range[2])))
+    Sys.sleep(1.5)
+    removeModal()
+  })
+  
+  # Summarize CBC data for a specific date. Assumes that db has table named cbc
+  cbcSummary <- eventReactive(input$cbcSummaryButton, {
+    req(input$cbcDate)
+    
+    fetch_data_for_date(input$cbcDate, "cbc")
     })
-
-    output$censusSummary <- renderTable({
-        ## Take dependency on button
-        input$censusSummaryButton
-        isolate({
-            config <- SBCpip::get_SBC_config()
-            filename_prefix <- sprintf(config$census_filename_prefix, as.character(input$censusDate))
-            filenames <- list.files(path = config$report_folder, pattern = filename_prefix, full.names = TRUE)
-            ##print(filenames)
-            ## Should only be one, in any case, we use the last
-            if (length(filenames) > 0) {
-                readxl::read_xlsx(tail(filenames, 1), sheet = 1) %>%
-                    dplyr::select(-LOCATION_DT) %>%
-                        t ->
-                        tmp
-                tibble::tibble(Location = rownames(tmp), Count = as.integer(tmp[, 1])) %>%
-                    dplyr::arrange(Location) %>%
-                    dplyr::mutate(Count = tidyr::replace_na(Count, 0))
-            }
-            else {
-                tibble::tibble(Error = "No report found for given date")
-            }
-        })
+  output$cbcSummary <- renderTable({
+    cbcSummary()
+  })
+  
+  # Summarize Census data for a specific date. Assumes that db has table named census
+  censusSummary <- eventReactive(input$censusSummaryButton, {
+    req(input$censusDate)
+    
+    fetch_data_for_date(input$censusDate, "census")
+  })
+  output$censusSummary <- renderTable({
+    censusSummary()
+  })
+  
+  # Summarize Surgery data for a specific date. Assumes that db has table named surgery
+  surgerySummary <- eventReactive(input$surgerySummaryButton, {
+    req(input$surgeryDate)
+    
+    fetch_data_for_date(input$surgeryDate, "surgery")
+  })
+  output$surgerySummary <- renderTable({
+    surgerySummary()
+  })
+  
+  # Predict platelet usage for a specific date.
+  observeEvent(input$predictButton, {
+    opts <- options(warn = 1) ## Report warnings as they appear
+    config <- SBCpip::get_SBC_config()
+    output$predictionResult <- renderTable({
+      db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+      on.exit({
+        if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
+      }, add = TRUE)
+      
+      model_age <- db %>% dplyr::tbl("model") %>% 
+        filter(date == input$predictDate) %>%
+        select(age)
+      
+      pr <- db %>% SBCpip::predict_for_date_db(config = config, date = input$predictDate) %>%
+        dplyr::mutate_at("date", as.character)
+      DBI::dbDisconnect(db, shutdown = TRUE)
+      pr
     })
-
-    output$predictionTable <- renderTable({
-        ## Take dependency on button
-        input$predictionSummaryButton
-        isolate({
-            config <- SBCpip::get_SBC_config()
-            SBCpip::build_prediction_table(config,
-                                           generate_report = FALSE,
-                                           start_date = input$startDate,
-                                           end_date = input$endDate) %>%
-                dplyr::select(1, 2, 10:15) %>%
-                    dplyr::mutate_at("date", as.character) %>%
-                    dplyr::mutate_if(is.numeric, as.integer)
-        })
-    })
-
-    observeEvent(input$predictButton, {
-        opts <- options(warn = 1) ## Report warnings as they appear
-        config <- SBCpip::get_SBC_config()
-        log_file <- tempfile("SBCpip", fileext = ".json")
-        loggit::set_logfile(log_file)
-        output$predictionResult <- renderTable({
-            SBCpip::predict_for_date(config = config, date = input$predictDate) %>%
-                dplyr::mutate_at("date", as.character)
-        })
-        #output$predictionLog <- renderTable({
-        #    jsonlite::read_json(log_file, simplifyVector = TRUE)
-        #})
-    })
-
-    observeEvent(input$setValues, {
-        set_config_param("data_folder", input$data_folder)
-        set_config_param("output_folder", input$output_folder)
-        set_config_param("report_folder", input$report_folder)
-        set_config_param("log_folder", input$log_folder)
-
-        set_config_param("cbc_filename_prefix", input$cbc_filename_prefix)
-        set_config_param("census_filename_prefix", input$census_filename_prefix)
-        set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
-        set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
-        set_config_param("output_filename_prefix", input$output_filename_prefix)
-
-        set_config_param("c0", input$c0)
-        set_config_param("min_inventory", input$min_inventory)
-        set_config_param("start", input$start)
-        set_config_param("history_window", input$history_window)
-        set_config_param("penalty_factor", input$penalty_factor)
-        set_config_param("model_update_frequency", input$model_update_frequency)
-        set_config_param("l1_bounds", seq(from = input$l1_bound_max, to = input$l1_bound_min, by = -2))
-        set_config_param("lag_bounds", c(NA, input$lag_bound))
-        
-        loggit::loggit(log_lvl = "INFO", log_msg = "Settings saved.")
-        showNotification("Settings saved.")
-    })
+  })
+    
+  # Generate prediction table for a range of dates.
+  generatePredTable <- eventReactive(input$predictionSummaryButton, {
+    req(input$startDate)
+    req(input$endDate)
+    
+    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    
+    
+    if (sum(data_tables %in% DBI::dbListTables(db)) != length(data_tables)) {
+      return("Data tables are not available in database. Make sure to run 'Settings' >> 'Apply Settings' and 'Settings' >> 'Reset Database' first.")
+    }
+    
+    config <- SBCpip::get_SBC_config()
+    start_date <- as.Date(input$startDate)
+    end_date <- as.Date(input$endDate)
+    num_days <- as.integer(end_date - start_date)
+    
+    # Predict range that needs to be predicted
+    prediction_df <- db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config)
+    pred_tbl <- db %>% SBCpip::build_prediction_table_db(config, start_date, end_date, 
+                                                         prediction_df, generate_report = FALSE) %>%
+      dplyr::mutate_at("date", as.character)
+    DBI::dbDisconnect(db, shutdown = TRUE)
+    pred_tbl
+    
+  })
+  output$predictionTable <- renderTable({
+    generatePredTable()
+  })
 
     output$wrPlot <- renderPlot({
         config <- SBCpip::get_SBC_config()

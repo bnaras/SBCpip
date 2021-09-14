@@ -558,7 +558,9 @@ summarize_and_clean_surgery_next_three_day <- function(raw_data, services) {
         tidyr::pivot_wider(names_from = .data$or_service, 
                            values_from = .data$n, 
                            values_fill = 0) %>%
-        dplyr::mutate(date = curr_date) -> 
+        dplyr::mutate(date = curr_date) %>%
+        dplyr::rename(other = `NA`) %>%
+        dplyr::relocate(date) -> 
         proc_data -> result$data -> result$summary
 
     result
@@ -603,7 +605,9 @@ summarize_and_clean_surgery_single_day <- function(raw_data, services) {
         tidyr::pivot_wider(names_from = .data$or_service, 
                            values_from = .data$n, 
                            values_fill = 0) %>%
-        dplyr::mutate(date = filtered_data$surgery_date[1]) -> 
+        dplyr::mutate(date = filtered_data$surgery_date[1]) %>%
+        dplyr::relocate(date) %>%
+        dplyr::rename(other = `NA`) -> 
         proc_data -> result$data -> result$summary
     
     result
@@ -842,50 +846,43 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
 #' @export
 process_data_for_date <- function(config,
                                   date = as.character(Sys.Date(), format = "%Y-%m-%d")) {
-
-    loggit::set_logfile(logfile = paste(config$log_folder, sprintf(config$log_filename_prefix, date), sep="/"))
-
+    
     cbc_file <- list.files(path = config$data_folder,
-                           pattern = sprintf(config$cbc_filename_prefix, date),
+                           pattern = sprintf(paste0(config$cbc_filename_prefix, "%s-"), date),
                            full.names = TRUE)
 
     census_file <- list.files(path = config$data_folder,
-                              pattern = sprintf(config$census_filename_prefix, date),
+                              pattern = sprintf(paste0(config$census_filename_prefix, "%s-"), date),
                               full.names = TRUE)
     
     # Take surgery files from next 3 days (i + 2, i + 3, i + 4)
     d_dates <- as.Date(date) + c(1, 2, 3)
     surgery_files <- sapply(d_dates, function(x) {
-        list.files(path = config$data_folder,
-                   pattern = sprintf(config$surgery_filename_prefix, x),
-                   full.names = TRUE)
+        surg_file <- list.files(path = config$data_folder,
+                                pattern = sprintf(paste0(config$surgery_filename_prefix, "%s-"), x),
+                                full.names = TRUE)
+        if (length(surg_file) != 1L) stop("Too few or too many surgery files matching patterns!")
+        surg_file
         })
 
     transfusion_file <- list.files(path = config$data_folder,
-                                   pattern = sprintf(config$transfusion_filename_prefix, date),
+                                   pattern = sprintf(paste0(config$transfusion_filename_prefix, "%s-"), date),
                                    full.names = TRUE)
 
     inventory_file <- list.files(path = config$data_folder,
-                                 pattern = sprintf(config$inventory_filename_prefix, date),
+                                 pattern = sprintf(paste0(config$inventory_filename_prefix, "%s-"), date),
                                  full.names = TRUE)
     
-    if (length(cbc_file) != 1L || 
-        length(census_file) != 1L || 
-        length(surgery_files) != 3L ||
-        length(transfusion_file) != 1L || 
-        length(inventory_file) > 1L) {
-        loggit::loggit(log_lvl = "ERROR", log_msg = "Too few or too many files matching patterns!")
-        stop("Too few or too many files matching patterns!")
-    }
+    if (length(cbc_file) != 1L) stop("Too few or too many CBC files matching patterns!")
+    if (length(census_file) != 1L) stop("Too few or too many census files matching patterns!")
+    if (length(surgery_files) != 3L) stop("Too few or too many surgery files matching patterns!")
+    if (length(transfusion_file) != 1L) stop("Too few or too many transfusion files matching patterns!")
+    if (length(inventory_file) > 1L) stop("Too few or too many files matching patterns!")
 
     # Process CBC data
     cbc_data <- read_one_cbc_file(cbc_file,
                                   cbc_abnormals = config$cbc_abnormals,
                                   cbc_vars = config$cbc_vars)
-
-    save_report_file(report_tbl = cbc_data$report,
-                     report_folder = config$report_folder,
-                     filename = cbc_data$filename)
 
     cbc_data$cbc_data %>%
         dplyr::filter(.data$BASE_NAME %in% config$cbc_vars) %>%
@@ -898,11 +895,7 @@ process_data_for_date <- function(config,
     # Process Census data
     census_data <- read_one_census_file(census_file,
                                         locations = config$census_locations)
-
-    save_report_file(report_tbl = census_data$report,
-                     report_folder = config$report_folder,
-                     filename = census_data$filename)
-
+    
     census_data <- census_data$census_data
     
     # (This is to set 0 as the NA replacement option for every census column,
@@ -916,25 +909,20 @@ process_data_for_date <- function(config,
         dplyr::arrange(date) ->
         census
     
+    
     # Process Surgery data
     surgery_data <- read_next_three_surgery_files(surgery_files,
                                                   services = config$surgery_services)
     
-    save_report_file(report_tbl = surgery_data$report,
-                     report_folder = config$report_folder,
-                     filename = surgery_data$filename)
-
+    
     surgery_data$surgery_data %>%
         dplyr::distinct() %>%
         dplyr::arrange(date) ->
         surgery
     
+    
     # Process Transfusion data
     transfusion_data <- read_one_transfusion_file(transfusion_file)
-
-    save_report_file(report_tbl = transfusion_data$report,
-                     report_folder = config$report_folder,
-                     filename = transfusion_data$filename)
 
     transfusion_data$transfusion_data %>%
         dplyr::distinct() %>% # part of original code
@@ -944,9 +932,6 @@ process_data_for_date <- function(config,
     # Process inventory data
     if (length(inventory_file) > 0) {
         inventory_data <- read_one_inventory_file(inventory_file)
-        save_report_file(report_tbl = inventory_data$report,
-                         report_folder = config$report_folder,
-                         filename = inventory_data$filename)
 
         inventory_data$inventory_data %>%
             dplyr::distinct() %>%
@@ -1362,6 +1347,9 @@ predict_for_date_db <- function(conn, config,
                                 prev_day = NA,
                                 eval = FALSE) {
     
+    loggit::loggit(log_lvl = "INFO", log_msg = sprintf("Predicting for date %s", date))
+    
+    
     if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
     
     ## Previous date is one day before unless specified explicity
@@ -1414,22 +1402,11 @@ predict_for_date_db <- function(conn, config,
             dplyr::collect()
         
         # Note that the upsert function is experimental. May need to replace with manual workaround
-        
+        # Note that all columns in db_table must exist in result (or vice versa) - throws vague error
         updated_data[[table_name]] <- db_table %>% 
             dplyr::rows_upsert(result[[table_name]], by = c("date")) %>%
             dplyr::filter(date >= first_day_train & date <= first_day_test)
     }
-    
-    # Add the transfusion information to the inventory [?? does this need to happen here?]
-    #updated_data$inventory %>% 
-    #  dplyr::mutate(date = as.Date(.data$date)) %>% # converting from dttm to date (not sure why it is a datetime)
-    #  dplyr::left_join(updated_data$transfusion, by="date") %>%
-    #  dplyr::mutate(collection = dplyr::lead(.data$count, 1) - 
-    #                  .data$count + .data$used + 
-    #                  pip::pos(.data$r1 - .data$used)) %>% # Amt collected
-    #  dplyr::mutate(expiry1 = .data$r1 + .data$r2) %>% # Expiring in 1 day
-    #  dplyr::mutate(expiry2 = .data$r3_plus) -> inventory
-    #result$inventory <- updated_data$inventory %>% filter(date == as.Date(prev_day))
     
     # Step 5. Create the combined dataset
     dataset <- create_dataset(config,
@@ -1497,7 +1474,7 @@ predict_for_date_db <- function(conn, config,
         model_row <- model_row %>% 
             dplyr::mutate(date = as.Date(date), 
                           l1_bound = model$l1_bound, 
-                          lag_bound = model$lag_bound,
+                          lag_bound = as.numeric(model$lag_bound),
                           age = 1L) %>% 
             dplyr::relocate(date)
         
@@ -1506,7 +1483,8 @@ predict_for_date_db <- function(conn, config,
         loggit::loggit(log_lvl = "INFO", log_msg = "Using previous model and scaling")
         
         # Load previous scaling and model
-        prev_scaling <- conn %>% dplyr::tbl("data_scaling") %>% dplyr::collect()
+        prev_scaling <- conn %>% dplyr::tbl("data_scaling") %>% 
+            dplyr::collect()
         
         scaled_dataset <- scale_dataset(training_data,
                                         center = prev_scaling$center,
@@ -1528,31 +1506,31 @@ predict_for_date_db <- function(conn, config,
                                      center = scaled_dataset$center,
                                      scale = scaled_dataset$scale)$scaled_data
     
-    
     # Step 10. Predict the total platelet usage for the next 3 days
     prediction <- pip::predict_three_day_sum(model = model,
                                              new_data = as.data.frame(new_scaled_data, optional=TRUE)) ## last row is what we  want to predict for
     
-    
     # Make sure prediction is returning a valid response. No point in continuing otherwise.
     if (is.nan(prediction)) {
-        stop(sprintf("Next three day prediction returned NaN for %s", date))
+        stop(sprintf("Next three day prediction returned NaN for %s. Make sure all features are present in the database", date))
     }
     
     prediction_df <- tibble::tibble(date = new_data$date, t_pred = prediction)
     
     # Step 11. Update the database with the new data
-    # We care about preserving old model parameters, so we insert (duckdb does not support upsert)
     if (!model_exists) {
         conn %>% DBI::dbWriteTable("model", model_row)
     } else {
         conn %>% upsert_db("model", model_row, by = "date")
     }
     
+    
     # Simply replace the previous scaling (meed 2 separate tables for center and scaling at this rate)
     conn %>% dplyr::copy_to(df = data.frame(scaled_dataset[c("center", "scale")]), 
                             name = "data_scaling",
-                            overwrite = TRUE)
+                            overwrite = TRUE, 
+                            temporary = FALSE)
+    
     
     # Upsert new data
     for (i in seq_along(result)) {
@@ -1560,7 +1538,7 @@ predict_for_date_db <- function(conn, config,
         conn %>% upsert_db(table_name, result[[table_name]], by = "date")
     }
     
-    prediction_df
+    prediction_df # WE NEED TO ADD THIS TO THE DATABASE ALSO
 }
 
 #' Get the actual prediction and platelet usage data from saved files for each date
@@ -1585,6 +1563,8 @@ get_prediction_and_usage <- function(config, start_date, end_date) {
                                full.names = TRUE)
     
     ############## REPLACE WITH DATABASE CALL ###################
+    # There is no database version of this function. 
+    # The prediction_df is not stored in the database as of now.
     d <- readRDS(tail(output_files, 1L))
     d$dataset %>%
         dplyr::select(.data$date, .data$plt_used) ->
@@ -1610,7 +1590,7 @@ upsert_db <- function(conn, df_name, new_row, by = "date") {
     if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
     
     tbl <- conn %>% dplyr::tbl(df_name) %>% dplyr::collect()
-    if (ncol(tbl) < ncol(new_row)) {
+    if (ncol(tbl) != ncol(new_row)) {
         stop("Column names in new entry do not match column names in database table.")
     }
     
@@ -1619,11 +1599,9 @@ upsert_db <- function(conn, df_name, new_row, by = "date") {
     
     row_exists <- new_row[[by]] %in% tbl[[by]]
     
-    if (!row_exists) {
-        DBI::dbExecute(conn, insert_command, as.list(new_row))
-    } else {
+    if (row_exists) {
         DBI::dbExecute(conn, sprintf("DELETE FROM %s WHERE %s = '%s'", df_name, by, as.character(new_row[[by]])))
-        DBI::dbExecute(conn, insert_command, as.list(new_row))
     }
+    DBI::dbExecute(conn, insert_command, as.list(new_row))
 }
 

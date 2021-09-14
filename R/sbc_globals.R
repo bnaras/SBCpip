@@ -28,14 +28,23 @@ SBC_config <- function() {
             'WBC' = function(x) x > 10.3,   ## K/muL
             'HCT' = function(x) x < 34 ## NARAS ADDED THIS!!
         ),
-        census_locations = c("B1", "B2", "B3", "C1", "C2", "C3", "E2-ICU", "EGR", "E3", "F3", 
-                             "FGR", "G2S", "CDU-CLIN DEC UNIT", "E1", "J2", "J4", "J5", "J6", 
-                             "J7", "K4", "K6", "K7", "L4", "L5", "L6", "L7", "M4", "M5", "M6", 
-                             "M7", "VCP 1 WEST", "VCP 2 NORTH", "VCP 2 WEST", "VCP 3 WEST", 
-                             "VCP CCU 1", "VCP CCU 2", "VCP NICU", "VCP NURSERY"),
-        surgery_services = c("Cardiac", "Electrophysiology", "Gastroenterology", "General", 
-                             "Interventional Radiology", "Neuroradiology", "Orthopedics", 
-                             "Transplant", "Vascular"), # Counts of types of surgeries conducted (OR_SERVICE)
+        census_locations = c("B1", "B2", "B3", "C1", "C2", "C3", "E2-ICU", "E1", 
+                             "J2", "J4", "J5", "J6", "J7", "K4", "K5", "K6", 
+                             "K7", "L4", "L5", "L6", "L7", "M4", "M5", "M6", "M7", 
+                             "VCP 1 WEST", "VCP 2 WEST",
+                             "VCP 2 NORTH",  "VCP 3 WEST", 
+                             "VCP CCU 1", 
+                             "VCP CCU 2", 
+                             "VCP NICU", "VCP NURSERY"),
+        surgery_services = c("Transplant", 
+                             "Cardiac", 
+                             "Bone Marrow Transplant",
+                             "Neurosurgery", 
+                             "Thoracic",
+                             "Vascular",
+                             "Hepatology",
+                             "General", 
+                             "Interventional Radiology"), # Counts of types of surgeries conducted (OR_SERVICE)
         c0 = 15, ## value for c0 to use in training model
         min_inventory = 30, ## the minimum inventory
         history_window = 200,  ## how many days to use in training
@@ -46,17 +55,18 @@ SBC_config <- function() {
         initial_collection_data = c(60, 60, 60), ## the initial number that will be collected for the first three days
         initial_expiry_data = c(0, 0), ## the number of units that expire a day after, and two days after respectively
         data_folder = "E:/platelet_predict_daily_data", ## Shared folder for Blood Center
-        cbc_filename_prefix = "LAB-BB-CSRP-CBC_Daily%s-",
-        census_filename_prefix = "LAB-BB-CSRP-Census_Daily%s-",
-        transfusion_filename_prefix = "LAB-BB-CSRP-Transfused Product Report_Daily%s-",
-        inventory_filename_prefix = "Daily_Product_Inventory_Report_Morning_To_Folder%s-",
-        surgery_filename_prefix = "LAB-BB-CSRP-Surgery_Daily%s-",
-        output_filename_prefix = "pip-output-%s.RDS",
+        cbc_filename_prefix = "LAB-BB-CSRP-CBC_Daily",
+        census_filename_prefix = "LAB-BB-CSRP-Census_Daily",
+        transfusion_filename_prefix = "LAB-BB-CSRP-Transfused Product Report_Daily",
+        inventory_filename_prefix = "Daily_Product_Inventory_Report_Morning_To_Folder",
+        surgery_filename_prefix = "LAB-BB-CSRP-Surgery_Daily",
+        #output_filename_prefix = "pip-output-%s.RDS",
         log_filename_prefix = "SBCpip_%s.json",
         model_update_frequency = 7L, ## every 7 days
         lag_window = 7L,             ## number of previous days to average in smoothing
         l1_bounds = seq(from = 200, to = 0, by = -2), ## allowed values of the l1 bound in cross validation
-        lag_bounds = c(NA)     ## Vector of possible bounds on the seven day moving average parameter (NA = no bound)
+        lag_bounds = c(-1)     ## Vector of possible bounds on the seven day moving average parameter (-1 = no bound)
+        # Was using NA and Inf to denote no bound, but found this to be incompatible with DuckDB
     )
     result$cbc_vars <- names(result$cbc_quantiles)[seq_len(9L)] ## Ignore HCT
     result$report_folder <- "E:/Blood_Center_Reports"

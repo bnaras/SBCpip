@@ -55,6 +55,7 @@ sbc_build_and_save_seed_db <- function(conn, pred_start_date, config) {
   }
   try(dbRemoveTable(conn, "model"), TRUE)
   try(dbRemoveTable(conn, "data_scaling"), TRUE)
+  try(dbRemoveTable(conn, "pred_cache"), TRUE)
   
   seed_start_date <- pred_start_date - config$history_window - 1L
   seed_end_date <- pred_start_date - 1L
@@ -80,8 +81,90 @@ sbc_build_and_save_seed_db <- function(conn, pred_start_date, config) {
     table_name <- names(seed_data)[i]
     dplyr::copy_to(conn, data.frame(seed_data[[table_name]], check.names = FALSE), 
                    name = table_name, 
-                   overwrite = TRUE)
+                   overwrite = TRUE,
+                   temporary = FALSE)
   }
+}
+
+# Helper function to obtain a list of unique dates in the folder following each filename pattern
+gather_dates_by_pattern <- function(data_folder, pattern) {
+  files <- list.files(path = data_folder, pattern = pattern, full.names = TRUE)
+
+  # Extract the date from each filename (assume date immediately follows pattern in YYYY-MM-DD format)
+  dates <- sapply(files, function(x) {
+    date <- substring(x, first = stringr::str_length(data_folder) + stringr::str_length(pattern) + 1L, 
+                      last = stringr::str_length(data_folder) + stringr::str_length(pattern) + 10L)
+    })
+  unique(dates)
+}
+
+#' Preprocess all available files and add to database
+#'
+#' @param config the site-specific configuration
+#' @return nothing (saves an RDS file with the seed data for 1 day before prediction date)
+#' @importFrom loggit set_logfile loggit
+#' @importFrom magrittr %<>%
+#' @importFrom dplyr copy_to
+#' @export
+sbc_build_and_save_full_db <- function(conn, config) {
+  
+  if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
+  
+  # Remove the model and data_scaling tables because we are setting up a new set of seed data.
+  #overwrite <- readline(prompt="This function will overwrite existing data tables. Continue? ")
+  #if (tolower(overwrite) != "yes" & tolower(overwrite) != "y") {
+  #  stop("Seed data build stopped.")
+  #}
+  try(dbRemoveTable(conn, "model"), TRUE)
+  try(dbRemoveTable(conn, "data_scaling"), TRUE)
+  try(dbRemoveTable(conn, "pred_cache"), TRUE)
+  
+  # Use filename prefixes instead of hardcoding the patterns here
+  cbc_dates <- gather_dates_by_pattern(config$data_folder, paste0(config$cbc_filename_prefix, "*"))
+  census_dates <- gather_dates_by_pattern(config$data_folder, paste0(config$census_filename_prefix, "*"))
+  surgery_dates <- gather_dates_by_pattern(config$data_folder, paste0(config$surgery_filename_prefix, "*"))
+  transfusion_dates <- gather_dates_by_pattern(config$data_folder, paste0(config$transfusion_filename_prefix, "*"))
+  inventory_dates <- gather_dates_by_pattern(config$data_folder, paste0(config$inventory_filename_prefix, "*"))
+  
+  all_dates <- Reduce(intersect, list(cbc_dates, census_dates, surgery_dates, transfusion_dates, inventory_dates))
+  print(all_dates)
+  
+  # Make sure we have files that are contiguous in time. Break at the first noncontiguous point
+  cut_point <- length(all_dates)
+  for (i in seq_len(length(all_dates) - 1L)) {
+    if (as.Date(all_dates[i]) + 1 != as.Date(all_dates[i + 1L])) {
+      cut_point <- i
+      warning(sprintf("Gap in data_folder dates found after %s, Excluding data after this point.", 
+                      all_dates[i]))
+      break
+    }
+  }
+  all_dates <- all_dates[1:(max(cut_point, 4) - 3)] # Exclude last 3 files because surgery requires next 3 days.
+  # Likely should remove the minus 3 ^ later
+
+  full_data <- list(cbc = NULL, census = NULL, transfusion = NULL, surgery = NULL, inventory = NULL)
+  
+  for (i in seq_along(all_dates)) {
+    date_str <- all_dates[i]
+    data_single_day <- process_data_for_date(config = config, date = date_str)
+    # Is there a way around this rbind?
+    full_data$cbc %<>% rbind(data_single_day$cbc)
+    full_data$census %<>% rbind(data_single_day$census)
+    full_data$surgery %<>% rbind(data_single_day$surgery)
+    full_data$transfusion %<>% rbind(data_single_day$transfusion)
+    full_data$inventory %<>% rbind(data_single_day$inventory)
+  }
+  
+  # Write a table for every type of data file in the seed window
+  for (i in seq_along(full_data)) {
+    table_name <- names(full_data)[i]
+    conn %>% dplyr::copy_to(data.frame(full_data[[table_name]], check.names = FALSE), 
+                            name = table_name, 
+                            overwrite = TRUE,
+                            temporary = FALSE)
+  }
+  # Return first and last date processed.
+  c(all_dates[1], all_dates[2])
 }
 
 #' Predict product usage and corresponding order schedule over specified date range
@@ -109,6 +192,7 @@ sbc_predict_for_range <- function(pred_start_date, num_days, config) {
     result <- predict_for_date(config = config, date = date_str)
     prediction_df <- rbind(prediction_df,result)
   }
+  
   prediction_df
 }
 
@@ -125,8 +209,11 @@ sbc_predict_for_range <- function(pred_start_date, num_days, config) {
 #' @note Assumes that the config output folder contains a seed dataset labeled one day prior
 #'     to the prediction date range.
 #' @importFrom loggit loggit
+#' @importFrom DBI dbDisconnect dbIsValid
 #' @export
 sbc_predict_for_range_db <- function(conn, pred_start_date, num_days, config) {
+  
+  if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
   
   pred_end_date <- pred_start_date + num_days
   all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1L)
@@ -138,6 +225,10 @@ sbc_predict_for_range_db <- function(conn, pred_start_date, num_days, config) {
     result <- conn %>% predict_for_date_db(config = config, date = date_str)
     prediction_df <- rbind(prediction_df,result)
   }
+  
+  # Cache predictions in the database
+  conn %>% dplyr::copy_to(prediction_df, name = "pred_cache", overwrite = TRUE, temporary = FALSE)
+  
   prediction_df
 }
 
@@ -164,6 +255,7 @@ sbc_predict_for_range_db <- function(conn, pred_start_date, num_days, config) {
 build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2, generate_report = TRUE,
                                    offset = config$start - 1,
                                    min_inventory = config$min_inventory) {
+  
   dates <- seq.Date(from = start_date, to = end_date, by = 1)
   output_files <- list.files(path = config$output_folder,
                              pattern = paste0("^",
@@ -308,6 +400,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
 #' @importFrom rlang .data
 #' @importFrom dplyr select left_join lead
 #' @importFrom tibble as_tibble
+#' @importFrom DBI dbDisconnect dbIsValid dbListTables
 #' @export
 build_prediction_table_db <- function(conn, 
                                       config, 
@@ -317,13 +410,24 @@ build_prediction_table_db <- function(conn,
                                       generate_report = TRUE,
                                       offset = config$start - 1,
                                       min_inventory = config$min_inventory) {
-  
+
   if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
   db_tablenames <- DBI::dbListTables(conn)
   if (!("transfusion" %in% db_tablenames) | !("inventory" %in% db_tablenames)) {
     stop("Database must contain at least transfusion and inventory tables.")
   }
-  # Make sure to check prediction table.
+  
+  # If no prediction table is provided, check the database for last prediction
+  if (is.null(pred_tbl)) {
+    if (!("pred_cache" %in% db_tablenames)) {
+      stop("No prediction table found as input or in cache.")
+    } else {
+      pred_tbl <- conn %>% dplyr::tbl("pred_cache") %>% dplyr::collect()
+    }
+  }
+  
+  #if ( !(as.Date(start_date) %in% pred_tbl$date) | !(as.Date(end_date) %in% pred_tbl$date))
+  #  stop("The prediction table must contain the requested dates.")
   
   dates <- seq.Date(from = start_date, to = end_date, by = 1)
   
