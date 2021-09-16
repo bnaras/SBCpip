@@ -406,7 +406,7 @@ build_prediction_table_db <- function(conn,
                                       config, 
                                       start_date, 
                                       end_date = Sys.Date() + 2,
-                                      pred_tbl,
+                                      pred_tbl = NULL,
                                       generate_report = TRUE,
                                       offset = config$start - 1,
                                       min_inventory = config$min_inventory) {
@@ -825,8 +825,8 @@ pred_table_analysis <- function(pred_table, config) {
   initial_mask <- seq_len(config$start + 5L)
   final_mask <- (nrow(pred_table) - 2L):nrow(pred_table)
   
-  list(pred_start = pred_table$date[length(initial_mask) + 1L],
-       pred_end = pred_table$date[final_mask[1L] - 1L],
+  list(pred_start = as.character(pred_table$date[length(initial_mask) + 1L]),
+       pred_end = as.character(pred_table$date[final_mask[1L] - 1L]),
        num_days = final_mask[1L] - length(initial_mask) - 1L, # effective number of days
        total_adj_waste = sum(pred_table$`Adj. waste`[-c(initial_mask, final_mask)]),
        total_adj_short = sum(pred_table$`Adj. shortage`[-c(initial_mask, final_mask)]),
@@ -839,21 +839,22 @@ pred_table_analysis <- function(pred_table, config) {
 #'
 #' @param coef_table, the coefficient table generated from SBCpip::build_coefficient_table
 #' @param config the site-specific configuration
+#' @param top_n the number of coefficients that are reported in the table
 #' @return a list containing the top 20 coefficient by sum of magnitudes over the analyzed period, 
 #' as well as the mean and standard deviation of their values.
 #' @export
-coef_table_analysis <- function(coef_table, config) {
+coef_table_analysis <- function(coef_table, config, top_n = 25L) {
   dows <- c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
   # sum the absolute values of all of the coefficients (except intercept). 
   # Display 20 coefficients in order of largest absolute sums and state average value over period
   coef_table %>% 
-    dplyr::select(-c(intercept, l1_bound)) %>%
+    dplyr::select(-c(intercept, l1_bound, lag_bound, age)) %>%
     tidyr::pivot_longer(-c(date), names_to = "feat") %>%
     dplyr::mutate(abs_val = abs(value)) %>%
     dplyr::group_by(feat) %>%
     dplyr::summarize(abs_sum = sum(abs_val), avg = mean(value), sd = sd(value)) %>% 
     dplyr::arrange(desc(abs_sum)) %>%
-    #dplyr::slice_head(n = 20L) %>%
+    dplyr::slice_head(n = top_n) %>%
     dplyr::select(c(feat, avg, sd)) -> top_coefs
   
   # separate day of week and other features

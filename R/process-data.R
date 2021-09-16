@@ -857,6 +857,7 @@ process_data_for_date <- function(config,
     
     # Take surgery files from next 3 days (i + 2, i + 3, i + 4)
     d_dates <- as.Date(date) + c(1, 2, 3)
+    print(d_dates)
     surgery_files <- sapply(d_dates, function(x) {
         surg_file <- list.files(path = config$data_folder,
                                 pattern = sprintf(paste0(config$surgery_filename_prefix, "%s-"), x),
@@ -1403,9 +1404,10 @@ predict_for_date_db <- function(conn, config,
         
         # Note that the upsert function is experimental. May need to replace with manual workaround
         # Note that all columns in db_table must exist in result (or vice versa) - throws vague error
-        updated_data[[table_name]] <- db_table %>% 
-            dplyr::rows_upsert(result[[table_name]], by = c("date")) %>%
-            dplyr::filter(date >= first_day_train & date <= first_day_test)
+        updated_data[[table_name]] <- tidyr::as_tibble(db_table) %>% 
+            dplyr::rows_upsert(tidyr::as_tibble(result[[table_name]]), by = c("date")) %>%
+            dplyr::filter(date >= first_day_train & date <= first_day_test) %>% 
+            dplyr::arrange(date) # Make sure dates are sorted because we take contiguous chunks next
     }
     
     # Step 5. Create the combined dataset
@@ -1510,12 +1512,13 @@ predict_for_date_db <- function(conn, config,
     prediction <- pip::predict_three_day_sum(model = model,
                                              new_data = as.data.frame(new_scaled_data, optional=TRUE)) ## last row is what we  want to predict for
     
+    
     # Make sure prediction is returning a valid response. No point in continuing otherwise.
     if (is.nan(prediction)) {
         stop(sprintf("Next three day prediction returned NaN for %s. Make sure all features are present in the database", date))
     }
     
-    prediction_df <- tibble::tibble(date = new_data$date, t_pred = prediction)
+    prediction_df <- tibble::tibble(date = as.Date(date), t_pred = prediction)
     
     # Step 11. Update the database with the new data
     if (!model_exists) {
@@ -1536,6 +1539,15 @@ predict_for_date_db <- function(conn, config,
     for (i in seq_along(result)) {
         table_name <- names(updated_data)[i]
         conn %>% upsert_db(table_name, result[[table_name]], by = "date")
+    }
+    print(prediction_df)
+    
+    # Update the pred_cache table
+    pred_cache_exists <- "pred_cache" %in% db_tablenames
+    if (!pred_cache_exists) {
+        conn %>% DBI::dbWriteTable("pred_cache", prediction_df)
+    } else {
+        conn %>% upsert_db("pred_cache", prediction_df, by = "date")
     }
     
     prediction_df # WE NEED TO ADD THIS TO THE DATABASE ALSO
