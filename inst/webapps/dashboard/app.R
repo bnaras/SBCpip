@@ -5,11 +5,11 @@ library(SBCpip)
 library(tidyverse)
 library(gridExtra)
 library(bibtex)
-library(future)
-library(promises)
 library(DBI)
 library(duckdb)
-plan(multisession)
+#library(future)
+#library(promises)
+#plan(multisession)
 
 paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", package = "SBCpip"))
 db_path <- "/Users/kaiokada/Desktop/Research/pip.duckdb"
@@ -74,15 +74,14 @@ sidebar <- dashboardSidebar(
     , conditionalPanel(
       condition = "input.tabId == 'model_settings'"
       , actionButton(inputId = "setModelValues", label = "Apply Model Settings")
+      , actionButton(inputId = "clearPredCache", label = "Clear Prediction Cache")
     )
-    , menuItem("Validate Model", icon = icon("table")
-               , menuSubItem("Prediction Summary", tabName = "predictionSummary")
-               , conditionalPanel(
-                 condition = "input.tabId == 'predictionSummary'"
-                 , dateInput(inputId = "startDate", label = "Start Date", value = "2018-04-10")
-                 , dateInput(inputId = "endDate", label = "End Date", value = as.character(Sys.Date()))
-                 , actionButton(inputId = "predictionSummaryButton", "Summarize")
-               )
+    , menuItem("Validate Model Over Range", icon = icon("caret-right"), tabName = "validation")
+    , conditionalPanel(
+      condition = "input.tabId == 'validation'"
+      , dateInput(inputId = "startDate", label = "Start Date", value = "2018-04-10")
+      , dateInput(inputId = "endDate", label = "End Date", value = as.character(Sys.Date()))
+      , actionButton(inputId = "predictionSummaryButton", "Validate Model")
     )
     , menuItem("Predict for Today", icon = icon("caret-right"), tabName = "prediction")
     , conditionalPanel(
@@ -106,6 +105,17 @@ sidebar <- dashboardSidebar(
 )
 
 body <- dashboardBody(
+  tags$head(
+    tags$style(
+      HTML(".shiny-notification {
+              height: 100px;
+              width: 800px;
+              position:fixed;
+              top: calc(50% - 50px);;
+              left: calc(50% - 400px);;
+            }
+           "
+      ))),
   useShinyalert(),
   tabItems(
     tabItem(tabName = "dashboard"
@@ -186,7 +196,8 @@ body <- dashboardBody(
                                 , label = "Range of L1 Bounds on Model Coefs:"
                                 , min = 0
                                 , max = 200
-                                , value = c(2, 50))
+                                , value = c(2, 50)
+                                , step = 2)
                   , sliderInput(inputId = "lag_bound"
                                 , label = "Bound on Seven-Day Usage Lag Coef:"
                                 , min = 5
@@ -195,10 +206,10 @@ body <- dashboardBody(
                 )
               )
     )
-    # Hide the below items until the settings have been applied
+    # Hide the below items until the settings have been applied?
     , tabItem(tabName = "prediction"
               , h2("Prediction Result")
-              , textOutput("predictionResult")
+              , verbatimTextOutput("predictionResult")
               , tableOutput("modelCoefs")
     )
     , tabItem(tabName = "cbc"
@@ -217,7 +228,7 @@ body <- dashboardBody(
               , h2("Inventory Summary")
               , tableOutput("inventorySummary")
     )
-    , tabItem(tabName = "predictionSummary"
+    , tabItem(tabName = "validation"
               , h2("Prediction Analysis")
               , fluidRow(
                 box(
@@ -321,6 +332,8 @@ server <- function(input, output, session) {
     set_config_param("surgery_services", unlist(lapply(strsplit(input$surgery_features, split = ","), trimws)))
     
     db_path <- input$database_path
+    
+    shinyalert("Success", "The database settings have been saved successfully.")
   })
   
   # Save parameters from settings panel to config.
@@ -342,7 +355,19 @@ server <- function(input, output, session) {
     
     loggit::loggit(log_lvl = "INFO", log_msg = "Settings saved.")
     
-    showNotification("Settings saved.")
+    shinyalert("Success", "The model settings have been saved successfully.")
+    
+  })
+  
+  # Clear currently cached predictions
+  observeEvent(input$clearPredCache, {
+    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    on.exit({
+      if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
+    }, add = TRUE)
+    db_tables <- db %>% DBI::dbListTables()
+    if ("pred_cache" %in% db_tables) db %>% DBI::dbRemoveTable("pred_cache")
+    shinyalert("Success", "The cached predictions have been cleared.")
   })
   
   # Build the full database using files in config$data_folder.
@@ -351,9 +376,17 @@ server <- function(input, output, session) {
     loggit::loggit(log_lvl = "INFO", log_msg = "Building database")
     config <- SBCpip::get_SBC_config()
     
-    print(config)
-    
     n_files <- length(list.files(config$data_folder))
+    
+    # Initialize shiny progress bar
+    progress <- shiny::Progress$new()
+    progress$set(message = "Database Build Progress", value = 0)
+    on.exit(progress$close())
+    
+    # Callback function to update progress
+    updateProgress <- function(detail = NULL) {
+      progress$inc(amount = 5/n_files, detail = detail) # 5 types of files
+    }
     
     db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
     on.exit({
@@ -363,8 +396,7 @@ server <- function(input, output, session) {
     showModal(modalDialog(sprintf("Building DuckDB database based on all available files in %s. 
                                     Estimated total time is %d minutes", config$data_folder, floor(n_files / 400)),
                           footer = NULL))
-    date_range <- tryCatch(db %>% SBCpip::sbc_build_and_save_full_db(config), error = function(e) {
-      #shinyalert("Oops!", str(e), type = "error")
+    date_range <- tryCatch(db %>% SBCpip::sbc_build_and_save_full_db(config, updateProgress), error = function(e) {
       print(e)
       NULL
     })
@@ -479,58 +511,79 @@ server <- function(input, output, session) {
     predictSingleDay()$coef_tbl
   })
   
-  
+  # The below are equired for async, not necessary otherwise.
+  startDate <- reactive({
+    input$startDate
+  })
+  endDate <- reactive({
+    input$endDate
+  })
   
   # Generate prediction table for a range of dates.
-  generatePredTable <- eventReactive(input$predictionSummaryButton, {    
+  generatePredTable <- eventReactive(input$predictionSummaryButton, {   
     opts <- options(warn = 1) ## Report warnings as they appear
     req(input$startDate)
     req(input$endDate)
     
-    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    start_date <- as.Date(startDate())
+    end_date <- as.Date(endDate())
+    num_days <- as.integer(end_date - start_date)
     
+    config <- SBCpip::get_SBC_config()
+    
+    # Initialize shiny progress bar
+    progress <- shiny::Progress$new()
+    progress$set(message = "Model Validation Progress", value = 0)
+    on.exit(progress$close())
+    
+    # Callback function to update progress
+    updateProgress <- function(detail = NULL) {
+      progress$inc(amount = 1/num_days, detail = detail)
+    }
+    
+    # Eventually will want to add future_promise here for scalability. Not including this
+    # for now as the resulting functionality is the same with a single session.
+    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
     on.exit({
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
     }, add = TRUE)
-    
+
     if (sum(data_tables %in% DBI::dbListTables(db)) != length(data_tables)) {
       return("Data tables are not available in database. Make sure to run 'Database Settings' >> 'Reset Database' first.")
     }
-    
-    config <- SBCpip::get_SBC_config()
-    start_date <- as.Date(input$startDate)
-    end_date <- as.Date(input$endDate)
-    num_days <- as.integer(end_date - start_date)
-    
+
     transfusion_tbl <- db %>% dplyr::tbl("transfusion") %>% dplyr::collect()
     
     all_dates <- seq.Date(start_date, end_date, by = 1L)
     missing_dates <- all_dates[!(all_dates %in% transfusion_tbl$date)]
-    
+
     # Check to make sure all transfusion data is included in the range we are trying to predict
     if (length(missing_dates) > 0L) return("Data for some or all of the selected dates are missing in the database.")
     
     # Predict range that needs to be predicted
-    prediction_df <- db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config)
+    prediction_df <- db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config, updateProgress = updateProgress)
     pred_analysis <- db %>% SBCpip::build_prediction_table_db(config, start_date, end_date, 
-                                                              prediction_df, generate_report = FALSE) %>%
+                                                              prediction_df, generate_report = FALSE) %>% 
       SBCpip::pred_table_analysis(config)
     coef_analysis <- db %>% SBCpip::build_coefficient_table_db(start_date, num_days) %>%
       SBCpip::coef_table_analysis()
-    DBI::dbDisconnect(db, shutdown = TRUE)
+      
+    db %>% DBI::dbDisconnect(shutdown = TRUE)
     
     # Output both the prediction and coefficient analyses
     list(pred_analysis = unlist(pred_analysis), coef_analysis = coef_analysis)
   })
   output$predAnalysis <- renderTable({
-    df <- as.data.frame(generatePredTable()$pred_analysis)
-    names(df) <- "value"
-    df
-  }, rownames = TRUE)
+    generatePredTable() %>% 
+      `$`(pred_analysis) %>%
+      as.data.frame()
+    }, rownames = TRUE)
   output$coefAnalysis<- renderTable({
-    generatePredTable()$coef_analysis$other
-  })
-  
+    generatePredTable() %>%
+      `$`(coef_analysis) %>%
+      `$`(other) 
+    })
+
   ## Plot a range of dates that have already been predicted (in the pred_cache)
   predPlot <- eventReactive(input$predPlotButton, {
     req(input$plotDateStart)
@@ -547,13 +600,13 @@ server <- function(input, output, session) {
     db %>% build_prediction_table_db(config, generate_report = FALSE,
                                      start_date = input$plotDateStart, 
                                      end_date = input$plotDateEnd) %>%
-      dplyr::filter(date >= input$plotDateStart + config$start + 6L) %>%
+      dplyr::filter(date >= input$plotDateStart + config$start + 5L) %>%
       dplyr::filter(date <= input$plotDateEnd - 3L) ->
       d
     
     # Number of units expiring in 1 day (4) + number expiring in 2 days (5)
     p1 <- ggplot2::ggplot(data = d) +
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `No. to order per prediction`, col = "Collection")) +
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `No. to collect per prediction`, col = "Collection")) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 1 day` + `Adj. no. expiring in 2 days`, col = "EOD Remaining Inventory"))
     
     # Adjusted waste
@@ -563,12 +616,10 @@ server <- function(input, output, session) {
   
     
     p3 <- ggplot2::ggplot(data = d) +
-      ggplot2::geom_line(mapping = ggplot2::aes(x = as.Date(date), y = `Three-day actual usage`, col = "Actual Usage")) +
-      ggplot2::geom_line(mapping = ggplot2::aes(x = as.Date(date), y = `Three-day prediction`, col = "Predicted Usage"))
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Three-day actual usage`, col = "Actual Usage")) +
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Three-day prediction`, col = "Predicted Usage"))
       ggplot2::labs(x = "Actual and Estimated 3-Day Usage", y = "Units") +
       ggplot2::theme(legend.position = "bottom")
-      
-    print(d)
     
     gridExtra::grid.arrange(grobs = lapply(list(p1, p2, p3), ggplot2::ggplotGrob),
                             layout_matrix = matrix(c(1,3,2,3), nrow = 2))
@@ -576,6 +627,8 @@ server <- function(input, output, session) {
   output$wrPlot <- renderPlot({
     predPlot()
   })
+  
+  
 }
 
 shinyApp(ui = ui, server = server)

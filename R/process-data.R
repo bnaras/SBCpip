@@ -548,8 +548,8 @@ summarize_and_clean_surgery_next_three_day <- function(raw_data, services) {
                       .data$case_class, 
                       .data$or_service) -> filtered_data
     
-    # Look at counts for most common procedures, known before today
-    curr_date <- min(filtered_data$surgery_date) - 1
+    # Look at counts for most common procedures, known before today (i + 1)
+    curr_date <- min(filtered_data$surgery_date)
     filtered_data %>%
         dplyr::group_by(.data$or_service, .drop = FALSE) %>%
         dplyr::filter( .data$case_class == "Elective"  ) %>% # Omit urgent for now
@@ -834,7 +834,7 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
 #' specified in the site-specific configuration object as per
 #' \code{\link{get_SBC_config}}
 #' @param config a site-specific configuration list
-#' @param date a string in YYYY-mm-dd format, default today
+#' @param date a string in YYYY-mm-dd format, default today (Day i + 1 vs. prediction for i + 1 - i + 3)
 #' @return a list of cbc, census, and transfusion tibbles
 #' @importFrom magrittr %>%
 #' @importFrom dplyr filter mutate select group_by summarize distinct
@@ -847,17 +847,21 @@ scale_dataset <- function(dataset, center = NULL, scale = NULL) {
 process_data_for_date <- function(config,
                                   date = as.character(Sys.Date(), format = "%Y-%m-%d")) {
     
+    # Grab yesterday (day i) CBC file obtained this morning (day i + 1)
     cbc_file <- list.files(path = config$data_folder,
                            pattern = sprintf(paste0(config$cbc_filename_prefix, "%s-"), date),
                            full.names = TRUE)
 
+    # Grab yesterday (day i) Census file obtained this morning (day i + 1)
     census_file <- list.files(path = config$data_folder,
                               pattern = sprintf(paste0(config$census_filename_prefix, "%s-"), date),
                               full.names = TRUE)
     
-    # Take surgery files from next 3 days (i + 2, i + 3, i + 4)
+    # Take surgery files from next 3 days (i + 1, i + 2, i + 3), obtained on day (i + 2, i + 3, i + 4)
+    # Note that this will need to be swapped for single day surgery pre-process when we use files that
+    # contain scheduled surgeries for the next 3 days as opposed to yesterday's surgeries
     d_dates <- as.Date(date) + c(1, 2, 3)
-    print(d_dates)
+
     surgery_files <- sapply(d_dates, function(x) {
         surg_file <- list.files(path = config$data_folder,
                                 pattern = sprintf(paste0(config$surgery_filename_prefix, "%s-"), x),
@@ -866,10 +870,12 @@ process_data_for_date <- function(config,
         surg_file
         })
 
+    # Grab yesterday (day i) Transfusion file obtained this morning (day i + 1)
     transfusion_file <- list.files(path = config$data_folder,
                                    pattern = sprintf(paste0(config$transfusion_filename_prefix, "%s-"), date),
                                    full.names = TRUE)
 
+    # Grab yesterday (day i) Inventory file obtained this morning (day i + 1)
     inventory_file <- list.files(path = config$data_folder,
                                  pattern = sprintf(paste0(config$inventory_filename_prefix, "%s-"), date),
                                  full.names = TRUE)
@@ -1348,9 +1354,6 @@ predict_for_date_db <- function(conn, config,
                                 prev_day = NA,
                                 eval = FALSE) {
     
-    loggit::loggit(log_lvl = "INFO", log_msg = sprintf("Predicting for date %s", date))
-    
-    
     if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
     
     ## Previous date is one day before unless specified explicity
@@ -1393,7 +1396,7 @@ predict_for_date_db <- function(conn, config,
     names(updated_data) <- names(result) 
     
     first_day_train <- as.Date(prev_day) - (config$history_window + config$lag_window)
-    first_day_test <- as.Date(prev_day)
+    first_day_test <- as.Date(prev_day) # Day i 
     
     for (i in seq_along(result)) {
         
@@ -1404,6 +1407,7 @@ predict_for_date_db <- function(conn, config,
         
         # Note that the upsert function is experimental. May need to replace with manual workaround
         # Note that all columns in db_table must exist in result (or vice versa) - throws vague error
+        # Note that updated_date includes training and test data.
         updated_data[[table_name]] <- tidyr::as_tibble(db_table) %>% 
             dplyr::rows_upsert(tidyr::as_tibble(result[[table_name]]), by = c("date")) %>%
             dplyr::filter(date >= first_day_train & date <= first_day_test) %>% 
@@ -1430,7 +1434,7 @@ predict_for_date_db <- function(conn, config,
             dplyr::collect() # Note - must have collect statement (otherwise R aborts)
         model_df <- as.data.frame(model_tbl) 
         model_row <- model_df %>% 
-            dplyr::filter(date == as.Date(prev_day)) %>% 
+            dplyr::filter(date == as.Date(prev_day)) %>% # Grab model row for day i
             dplyr::distinct()
         colnames(model_row) <- c("date", "intercept", all_vars, "l1_bound", "lag_bound", "age")
     }
@@ -1470,7 +1474,7 @@ predict_for_date_db <- function(conn, config,
                                   l1_bounds = config$l1_bounds,
                                   lag_bounds = config$lag_bounds)
         
-        # Create a new row for model_df
+        # Create a new row for model_df (by convention - assign day i + 1)
         model_row <- as.data.frame(t(model$coefs))
         names(model_row) <- names(model$coefs)
         model_row <- model_row %>% 
@@ -1512,13 +1516,13 @@ predict_for_date_db <- function(conn, config,
     prediction <- pip::predict_three_day_sum(model = model,
                                              new_data = as.data.frame(new_scaled_data, optional=TRUE)) ## last row is what we  want to predict for
     
-    
     # Make sure prediction is returning a valid response. No point in continuing otherwise.
     if (is.nan(prediction)) {
         stop(sprintf("Next three day prediction returned NaN for %s. Make sure all features are present in the database", date))
     }
     
-    prediction_df <- tibble::tibble(date = as.Date(date), t_pred = prediction)
+    # Recall that the input to this function is date i + 1. However, we want to obtain t_i
+    prediction_df <- tibble::tibble(date = as.Date(prev_day), t_pred = prediction)
     
     # Step 11. Update the database with the new data
     if (!model_exists) {
@@ -1550,7 +1554,7 @@ predict_for_date_db <- function(conn, config,
         conn %>% upsert_db("pred_cache", prediction_df, by = "date")
     }
     
-    prediction_df # WE NEED TO ADD THIS TO THE DATABASE ALSO
+    prediction_df
 }
 
 #' Get the actual prediction and platelet usage data from saved files for each date
