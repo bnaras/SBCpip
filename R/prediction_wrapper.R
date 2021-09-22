@@ -717,13 +717,11 @@ projection_loss <- function(pred_table, config) {
   last_day <- nrow(pred_table) - 3L
   pred_table_trunc <- pred_table[seq(first_day, last_day), , drop = FALSE]
   
-  remaining_inventory <- pred_table_trunc$`No. expiring in 1 day` + pred_table_trunc$`No. expiring in 2 days`
-  adj_remaining_inventory <- pred_table_trunc$`Adj. no. expiring in 1 day` + pred_table_trunc$`Adj. no. expiring in 2 days`
-  
   loss <- pip::compute_loss(preds = pred_table_trunc$`Three-day prediction`, 
                             y = pred_table$`Platelet usage`,
                             w = matrix(pred_table_trunc$Waste, ncol = 1),
-                            r = matrix(remaining_inventory, ncol = 1),
+                            r1 = matrix(pred_table_trunc$`No. expiring in 1 day`, ncol = 1),
+                            r2 = matrix(pred_table_trunc$`No. expiring in 2 days`, ncol = 1),
                             s = matrix(pred_table_trunc$Shortage, ncol = 1),
                             penalty_factor = config$penalty_factor,
                             lo_inv_limit = config$lo_inv_limit,
@@ -732,7 +730,8 @@ projection_loss <- function(pred_table, config) {
   adj_loss <- pip::compute_loss(preds = pred_table_trunc$`Three-day prediction`, 
                                 y = pred_table$`Platelet usage`,
                                 w = matrix(pred_table_trunc$`Adj. waste`, ncol = 1),
-                                r = matrix(adj_remaining_inventory, ncol = 1),
+                                r1 = matrix(pred_table_trunc$`Adj. no. expiring in 1 day`, ncol = 1),
+                                r2 = matrix(pred_table_trunc$`Adj. no. expiring in 2 days`, ncol = 1),
                                 s = matrix(pred_table_trunc$`Adj. shortage`, ncol = 1),
                                 penalty_factor = config$penalty_factor,
                                 lo_inv_limit = config$lo_inv_limit,
@@ -766,7 +765,8 @@ real_loss <- function(pred_table, config) {
   loss <- pip::compute_loss(preds = pred_table_trunc$`Three-day prediction`, 
                             y = pred_table$`Platelet usage`,
                             w = matrix(pred_table_trunc$`True Waste`, ncol = 1),
-                            r = matrix(remaining_inventory, ncol = 1),
+                            r1 = matrix(remaining_inventory, ncol = 1),
+                            r2 = matrix(remaining_inventory, ncol = 1), # This is incorrect. Need to break up remaining_inventory
                             s = matrix(pred_table_trunc$`True Shortage`, ncol = 1),
                             penalty_factor = config$penalty_factor,
                             lo_inv_limit = config$lo_inv_limit,
