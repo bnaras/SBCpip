@@ -225,7 +225,7 @@ sbc_predict_for_range_db <- function(conn, pred_start_date, num_days, config, up
   
   # offset by 1 bc the files we process are for the next day1
   pred_end_date <- pred_start_date + num_days 
-  all_pred_dates <- seq.Date(from = pred_start_date + 1L, to = pred_end_date + 1L, by = 1L) 
+  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1L) 
   
   prediction_df <- NULL
   for (i in seq_along(all_pred_dates)) {

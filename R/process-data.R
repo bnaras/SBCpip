@@ -1470,6 +1470,8 @@ predict_for_date_db <- function(conn, config,
                                   c0 = config$c0,
                                   history_window = config$history_window,
                                   penalty_factor = config$penalty_factor,
+                                  lo_inv_limit = config$lo_inv_limit,
+                                  hi_inv_limit = config$hi_inv_limit,
                                   start = config$start,
                                   l1_bounds = config$l1_bounds,
                                   lag_bounds = config$lag_bounds)

@@ -338,7 +338,7 @@ server <- function(input, output, session) {
   
   # Save parameters from settings panel to config.
   observeEvent(input$setModelValues, {
-    
+
     # Inventory parameters
     set_config_param("c0", input$c0) # for training and cross-validation
     set_config_param("lo_inv_limit", input$loss_inventory_range[1]) # for loss function
@@ -354,7 +354,7 @@ server <- function(input, output, session) {
     set_config_param("lag_bounds", c(-1, input$lag_bound))
     
     loggit::loggit(log_lvl = "INFO", log_msg = "Settings saved.")
-    
+
     shinyalert("Success", "The model settings have been saved successfully.")
     
   })
