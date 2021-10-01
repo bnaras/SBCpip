@@ -1,5 +1,6 @@
 library(shiny)
 library(shinydashboard)
+library(shinyWidgets)
 library(shinyalert)
 library(SBCpip)
 library(tidyverse)
@@ -93,12 +94,22 @@ sidebar <- dashboardSidebar(
       , numericInput(inputId = "expire2", label = "Remaining Units Expiring in 2 Days", value = 0)
       , actionButton(inputId = "predictButton", "Predict")
     )
-    , menuItem("Plots", icon = icon("bar-chart-o"), tabName = "modelPlots")
+    , menuItem("Prediction Plots", icon = icon("bar-chart-o"), tabName = "modelPlots")
     , conditionalPanel(
       condition = "input.tabId == 'modelPlots'"
       , dateInput(inputId = "plotDateStart", label = "Start Date", value = "2018-04-10")
       , dateInput(inputId = "plotDateEnd", label = "End Date", value = as.character(Sys.Date()))
       , actionButton(inputId = "predPlotButton", label = "Plot Predictions")
+    )
+    , menuItem("Coefficient Plots", icon = icon("bar-chart-o"), tabName = "coefPlots")
+    , conditionalPanel(
+      condition = "input.tabId == 'coefPlots'"
+      , dateInput(inputId = "coefPlotDateStart", label = "Start Date", value = "2018-04-10")
+      , dateInput(inputId = "coefPlotDateEnd", label = "End Date", value = as.character(Sys.Date()))
+      #, selectInput(inputId = "coefList", 
+      #              label = "Coefficient to Plot:",
+      #              choices = c("None"))
+      , actionButton(inputId = "plotCoefButton", "Plot Coefficients")
     )
     , actionButton(inputId = "exitApp", "Exit")
   )
@@ -189,7 +200,7 @@ body <- dashboardBody(
                                 , value = 10)
                   , sliderInput(inputId = "model_update_frequency"
                                 , label = "Model Update Frequency (days):"
-                                , min = 7
+                                , min = 1
                                 , max = 30
                                 , value = 7)
                   , sliderInput(inputId = "l1_bound_range"
@@ -244,6 +255,14 @@ body <- dashboardBody(
     , tabItem(tabName = "modelPlots"
               , h2("Waste and Remaining Histograms")
               , plotOutput("wrPlot")
+    )
+    , tabItem(tabName = "coefPlots"
+              , h2("Coefficient Plots Over Time")
+              , h4("Select Coefficients, Start Date, and End Date. Then click \"Plot Coefficients.\"")
+              , shinyWidgets::multiInput(inputId = "coefList", 
+                                         label = "Coefficients to Plot:", 
+                                         choices = c("None"))
+              , plotOutput("cfPlot")
     )
   )
 )
@@ -308,7 +327,18 @@ fetch_data_for_dates <- function(req_start_date, req_end_date, table_name) {
   tbl
 }
 
+# Helper function for feature input parsing (probably will remove)
+
 server <- function(input, output, session) {
+  
+  parse_vars <- function(v) unlist(lapply(strsplit(as.character(v), split = ","), trimws))
+  
+  all_active_features <- reactive({
+    
+    all_active_features <- c(sapply(parse_vars(input$cbc_features), function(x) paste0(x, "_Nq")),
+                      parse_vars(input$census_features),
+                      parse_vars(input$surgery_features))
+  })
   
   # Exit the app
   observeEvent(input$exitApp, {
@@ -327,11 +357,17 @@ server <- function(input, output, session) {
     set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
     set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
     
-    set_config_param("cbc_vars", unlist(lapply(strsplit(input$cbc_features, split = ","), trimws)))
-    set_config_param("census_locations", unlist(lapply(strsplit(input$census_features, split = ","), trimws)))
-    set_config_param("surgery_services", unlist(lapply(strsplit(input$surgery_features, split = ","), trimws)))
+    # Variables (eventually would like some kind of picklist setup instead of free text)
+    set_config_param("cbc_vars", parse_vars(input$cbc_features))
+    set_config_param("census_locations", parse_vars(input$census_features))
+    set_config_param("surgery_services", parse_vars(input$surgery_features))
     
     db_path <- input$database_path
+    
+    # Update the coefficients 
+    updateMultiInput(session, 
+                     inputId = "coefList", 
+                     choices = all_active_features())
     
     shinyalert("Success", "The database settings have been saved successfully.")
   })
@@ -527,7 +563,7 @@ server <- function(input, output, session) {
     
     start_date <- as.Date(startDate())
     end_date <- as.Date(endDate())
-    num_days <- as.integer(end_date - start_date)
+    num_days <- as.integer(end_date - start_date + 1)
     
     config <- SBCpip::get_SBC_config()
     
@@ -563,7 +599,7 @@ server <- function(input, output, session) {
     # Predict range that needs to be predicted
     prediction_df <- db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config, updateProgress = updateProgress)
     pred_analysis <- db %>% SBCpip::build_prediction_table_db(config, start_date, end_date, 
-                                                              prediction_df, generate_report = FALSE) %>% 
+                                                              prediction_df) %>% 
       SBCpip::pred_table_analysis(config)
     coef_analysis <- db %>% SBCpip::build_coefficient_table_db(start_date, num_days) %>%
       SBCpip::coef_table_analysis()
@@ -597,8 +633,7 @@ server <- function(input, output, session) {
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
     }, add = TRUE)
     
-    db %>% build_prediction_table_db(config, generate_report = FALSE,
-                                     start_date = input$plotDateStart, 
+    db %>% build_prediction_table_db(config, start_date = input$plotDateStart, 
                                      end_date = input$plotDateEnd) %>%
       dplyr::filter(date >= input$plotDateStart + config$start + 5L) %>%
       dplyr::filter(date <= input$plotDateEnd - 3L) ->
@@ -606,26 +641,64 @@ server <- function(input, output, session) {
     
     # Number of units expiring in 1 day (4) + number expiring in 2 days (5)
     p1 <- ggplot2::ggplot(data = d) +
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `No. to collect per prediction`, col = "Collection")) +
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 1 day` + `Adj. no. expiring in 2 days`, col = "EOD Remaining Inventory"))
-    
-    # Adjusted waste
-    p2 <- ggplot2::ggplot(data = d) +
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = Waste, col = "Waste")) +
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = Shortage, col = "Shortage"))
-  
-    
-    p3 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Three-day actual usage`, col = "Actual Usage")) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Three-day prediction`, col = "Predicted Usage"))
-      ggplot2::labs(x = "Actual and Estimated 3-Day Usage", y = "Units") +
+    ggplot2::labs(x = "Actual and Estimated 3-Day Usage", y = "Units") +
       ggplot2::theme(legend.position = "bottom")
     
-    gridExtra::grid.arrange(grobs = lapply(list(p1, p2, p3), ggplot2::ggplotGrob),
-                            layout_matrix = matrix(c(1,3,2,3), nrow = 2))
+
+    # Adjusted waste
+    p2 <- ggplot2::ggplot(data = d) +
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = Waste, col = "Waste")) + 
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 1 day`, col = "Expiring in 1 Day"))
+    
+    p3 <- ggplot2::ggplot(data = d) + 
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = Shortage, col = "Shortage")) + 
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 2 days`, col = "Expiring in 2 Days"))
+    
+    p4 <- ggplot2::ggplot(data = d) +
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `No. to collect per prediction`, col = "Collection"))
+    
+    gridExtra::grid.arrange(grobs = lapply(list(p1, p2, p3, p4), ggplot2::ggplotGrob),
+                            layout_matrix = matrix(c(1,2,3,4), nrow = 2))
   })
   output$wrPlot <- renderPlot({
     predPlot()
+  })
+  
+  ## Cooefficient Plot functionality
+  coefPlot <- eventReactive(input$plotCoefButton, {
+    req(input$coefPlotDateStart)
+    req(input$coefPlotDateEnd)
+    req(input$coefList)
+    
+    config <- SBCpip::get_SBC_config()
+    
+    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    
+    on.exit({
+      if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
+    }, add = TRUE)
+    
+    start_date <- as.Date(input$coefPlotDateStart)
+    end_date <- as.Date(input$coefPlotDateEnd)
+    num_days <- as.integer(end_date - start_date + 1)
+    
+    coef_table <- db %>% SBCpip::build_coefficient_table_db(start_date, num_days)
+    
+    pred_table <- db %>% SBCpip::build_prediction_table_db(config, start_date, end_date)
+    
+    # Number of units expiring in 1 day (4) + number expiring in 2 days (5)
+    p1 <- coef_table %>% 
+      tidyr::pivot_longer(cols = -date) %>% # pivot longer so we can plot in groups
+      dplyr::filter(name %in% c(input$coefList, "l1_bound")) %>% # restrict to coefficients in the specified list
+      ggplot2::ggplot() +
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = value, group = name, color = name))
+    
+    p1
+  })
+  output$cfPlot <- renderPlot({
+    coefPlot()
   })
   
   

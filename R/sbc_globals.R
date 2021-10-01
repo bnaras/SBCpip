@@ -121,6 +121,17 @@ get_SBC_config <- function() {
     sbc_config
 }
 
+#' Obtain the exact features used in the model
+#' 
+#' @return a vector of strings corresponding to database column headers/features
+#' @export
+#' 
+get_SBC_features <- function() {
+    c(sapply(sbc_config$cbc_vars, function(x) paste0(x, "_Nq")),
+      sbc_config$census_locations, 
+      sbc_config$surgery_services)
+}
+
 #' Reset the global package variable \code{sbc_config}
 #'
 #' @return the default value value of testpack package global \code{sbc_config}
