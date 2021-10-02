@@ -496,9 +496,8 @@ build_prediction_table_db <- function(conn,
     pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
     pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
     pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
-    pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) 
-                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"]) + 1), 
-                                 config$c0)
+    pred_mat[i+3,"x_adj"] <- floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) 
+                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"]))
   }
   
   pred_mat[, "Alert"] <- (pred_mat[, "r1"] + pred_mat[, "r2"] <= min_inventory)
@@ -539,8 +538,10 @@ build_prediction_table_db <- function(conn,
   # Compute "true" values for waste, fresh collections, and shortage
   pred_table %>%
     dplyr::mutate(`True Waste` = pip::pos(`Inv. expiring in 1 day` - `Platelet usage`)) %>%
-    dplyr::mutate(`Fresh Units Collected` = dplyr::lead(`Inv. count`, 1) - `Inv. count` +
-                    `Platelet usage` + `True Waste`) %>%
+    dplyr::mutate(`Fresh Units Collected` = ifelse(dplyr::lead(`Inv. expiring in 2 days`, 1) > 0, 
+                                                  (dplyr::lead(`Inv. count`, 1) - (`Inv. count` -`Platelet usage` - `True Waste`)),
+                                                  ceiling((dplyr::lead(`Inv. expiring in 1 day`, 1) - (`Inv. count` -`Platelet usage` - `True Waste`)))) # Largest value it could possibly be
+                  ) %>%
     dplyr::mutate(`True Shortage` = pip::pos(`Platelet usage` - `Inv. count` - `Fresh Units Collected`)) ->
     pred_table
   
@@ -716,17 +717,20 @@ projection_loss <- function(pred_table, config) {
                             lo_inv_limit = config$lo_inv_limit,
                             hi_inv_limit = config$hi_inv_limit)
   
-  adj_loss <- pip::compute_loss(preds = pred_table_trunc$`Three-day prediction`, 
-                                y = pred_table$`Platelet usage`,
-                                w = matrix(pred_table_trunc$`Adj. waste`, ncol = 1),
-                                r1 = matrix(pred_table_trunc$`Adj. no. expiring in 1 day`, ncol = 1),
-                                r2 = matrix(pred_table_trunc$`Adj. no. expiring in 2 days`, ncol = 1),
-                                s = matrix(pred_table_trunc$`Adj. shortage`, ncol = 1),
-                                penalty_factor = config$penalty_factor,
-                                lo_inv_limit = config$lo_inv_limit,
-                                hi_inv_limit = config$hi_inv_limit)
+  #adj_loss <- pip::compute_loss(preds = pred_table_trunc$`Three-day prediction`, 
+  #                              y = pred_table$`Platelet usage`,
+  #                              w = matrix(pred_table_trunc$`Adj. waste`, ncol = 1),
+  #                              r1 = matrix(pred_table_trunc$`Adj. no. expiring in 1 day`, ncol = 1),
+  #                              r2 = matrix(pred_table_trunc$`Adj. no. expiring in 2 days`, ncol = 1),
+  #                              s = matrix(pred_table_trunc$`Adj. shortage`, ncol = 1),
+  #                              penalty_factor = config$penalty_factor,
+  #                              lo_inv_limit = config$lo_inv_limit,
+  #                              hi_inv_limit = config$hi_inv_limit)
   
-  list(`Avg. Daily Loss` = loss, `Adj. Avg. Daily Loss` = adj_loss)
+  #list(`Avg. Daily Loss` = loss, `Adj. Avg. Daily Loss` = adj_loss)
+  
+  list(`Avg. Daily Loss` = loss)
+  
 }
 
 #' Compute the true average daily loss based on actual inventory levels during the
@@ -828,8 +832,10 @@ pred_table_analysis <- function(pred_table, config) {
   list(pred_start = as.character(pred_table$date[length(initial_mask) + 1L]),
        pred_end = as.character(pred_table$date[final_mask[1L] - 1L]),
        num_days = final_mask[1L] - length(initial_mask) - 1L, # effective number of days
-       total_adj_waste = sum(pred_table$`Adj. waste`[-c(initial_mask, final_mask)]),
-       total_adj_short = sum(pred_table$`Adj. shortage`[-c(initial_mask, final_mask)]),
+       total_model_waste = sum(pred_table$`Adj. waste`[-c(initial_mask, final_mask)]),
+       total_model_short = sum(pred_table$`Adj. shortage`[-c(initial_mask, final_mask)]),
+       total_real_waste = sum(pred_table$`True Waste`[-c(initial_mask, final_mask)]),
+       total_real_short = sum(pred_table$`True Shortage`[-c(initial_mask, final_mask)]),
        proj_loss = projection_loss(pred_table, config),
        real_loss = real_loss(pred_table, config),
        three_day_pred_rmse = prediction_error(pred_table, config))
