@@ -2,7 +2,7 @@
 % Please edit documentation in R/prediction_wrapper.R
 \name{sbc_predict_for_range}
 \alias{sbc_predict_for_range}
-\title{Predict product usage and corresponding order schedule over specified date range}
+\title{Predict product usage and corresponding collect schedule over specified date range}
 \usage{
 sbc_predict_for_range(pred_start_date, num_days, config)
 }
@@ -20,7 +20,7 @@ a prediction tibble named prediction_df with a column for date and the predictio
     date range.
 }
 \description{
-Predict product usage and corresponding order schedule over specified date range
+Predict product usage and corresponding collect schedule over specified date range
 }
 \note{
 Assumes that the config output folder contains a seed dataset labeled one day prior

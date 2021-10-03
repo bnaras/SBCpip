@@ -1,0 +1,19 @@
+data_file,sbc_data_column_name,description,type,org_data_column_name_to_edit
+CBC,ORDER_PROC_ID,CBC Unique Identifier,Character,ORDER_PROC_ID
+CBC,BASE_NAME,Specific blood cell / component type,Character,BASE_NAME
+CBC,RESULT_TIME,Datetime at which the test result was obtained,"Datetime (""%d-%b-%y %H:%M:%S"")",RESULT_TIME
+CBC,ORD_VALUE,Value obtained for the specific component as a result of the test (coerced to Double),Character,ORD_VALUE
+Census,PAT_ID,Unique Patient Identifier,Character,PAT_ID
+Census,LOCATION_NAME,Name of location where patient was present,Character,LOCATION_NAME
+Census,LOCATION_DT,Datetime at which patient was logged as present in a specific location/section of the hospital.,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",LOCATION_DT
+Surgery,LOG_ID,Unique identifier for set of surgical procedures,Character,LOG_ID
+Surgery,OR_SERVICE,Specific type of surgery to be carried out,Character,OR_SERVICE
+Surgery,SURGERY_DATE,Datetime of surgical operation,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",SURGERY_DATE
+Surgery,FIRST_SCHED_DATE,Datetime indicating when procedure was first scheduled,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",FIRST_SCHED_DATE
+Surgery,CASE_CLASS,Indicator of whether surgery is “Elective” or “Urgent”,Character,CASE_CLASS
+Transfusion,Type,Specific blood cell / component type being transfused. We focus on “PLT”,Character,Type
+Transfusion,Issue Date/Time,Datetime when component is transfused to patient ,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",Issue Date/Time
+Inventory,Inv. ID,Unique identifier for product in inventory,Character,Inv. ID
+Inventory,Type,The specific type of transfusable product (e.g. “PLT”),Character,Type
+Inventory,Days to Expire,Number of days after which unit is considered expired,Integer,Days to Expire
+Inventory,Exp. Date,Specific date on which unit is set to expire,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",Exp. Date

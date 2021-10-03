@@ -132,7 +132,7 @@ sbc_build_and_save_full_db <- function(conn, config, updateProgress = NULL) {
   all_dates <- Reduce(intersect, list(cbc_dates, census_dates, surgery_dates, transfusion_dates, inventory_dates))
   print(all_dates)
   
-  # Make sure we have files that are contiguous in time. Break at the first noncontiguous point
+  # Make sure we have files that are contiguous in time. Break at the first non-contiguous point
   cut_point <- length(all_dates)
   for (i in seq_len(length(all_dates) - 1L)) {
     if (as.Date(all_dates[i]) + 1 != as.Date(all_dates[i + 1L])) {
@@ -150,7 +150,7 @@ sbc_build_and_save_full_db <- function(conn, config, updateProgress = NULL) {
   for (i in seq_along(all_dates)) {
     date_str <- all_dates[i]
     data_single_day <- process_data_for_date(config = config, date = date_str)
-    # Is there a way around this rbind?
+
     full_data$cbc %<>% rbind(data_single_day$cbc)
     full_data$census %<>% rbind(data_single_day$census)
     full_data$surgery %<>% rbind(data_single_day$surgery)

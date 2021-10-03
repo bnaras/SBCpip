@@ -2,44 +2,74 @@
 #' @param filename the fully qualified path of the file
 #' @param cbc_abnormals, a named list of functions of a single vector
 #'     returning TRUE for abnormal values
-#' @param cbc_vars, the names of fields to include; others are excluded
+#' @param cbc_vars, the names of values to include; others are excluded
+#' @param org_cols, the names of columns at the target organization (specified in data mapping)
 #' @return a list of four items, filename, raw_data (tibble), report a
 #'     list of missing values tibble and a summary tibble, cbc_data
 #'     (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
+#' @importFrom dplyr rename
 #' @importFrom loggit set_logfile loggit
 #' @export
-read_one_cbc_file <- function(filename, cbc_abnormals, cbc_vars) {
+read_one_cbc_file <- function(filename, cbc_abnormals, cbc_vars, 
+                              org_cols = c("ORDER_PROC_ID", "BASE_NAME", "RESULT_TIME", "ORD_VALUE")) {
+    if (length(filename) != 1L){
+        stop("Not enough CBC files found.")
+    }
+    
     ## ORD_VALUE can have values like "<0.1", so we read as char
     ## and convert as needed
+    sbc_cols <- c("ORDER_PROC_ID", "BASE_NAME", "RESULT_TIME", "ORD_VALUE")
+    
+    ## Start with SBC names
     col_types <- list(
-        ORDER_PROC_ID = readr::col_integer(),
-        LINE = readr::col_integer(),
-        PAT_ENC_CSN_ID = readr::col_double(),
-        ADMIT_CONF_STAT_C = readr::col_integer(),
-        DISCH_CONF_STAT_C = readr::col_integer(),
-        PAT_ID = readr::col_character(),
-        PAT_MRN_ID = readr::col_character(),
-        PROC_CODE = readr::col_character(),
-        DESCRIPTION = readr::col_character(),
+        ORDER_PROC_ID = readr::col_character(),
         BASE_NAME = readr::col_character(),
-        COMMON_NAME = readr::col_character(),
-        ORD_VALUE = readr::col_character(), ## Needs to be coerced to double
-        ORDERING_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S%p"),
-        ORDER_TIME = readr::col_datetime("%d-%b-%y %H:%M:%S"),
         RESULT_TIME = readr::col_datetime("%d-%b-%y %H:%M:%S"),
-        ORDER_STATUS_C = readr::col_integer(),
-        RESULT_STATUS_C = readr::col_integer(),
-        SERV_AREA_ID = readr::col_character(),
-        PARENT_HOSPITAL = readr::col_character()
+        ORD_VALUE = readr::col_character()
     )
-
+    
+    ## Rename essential columns using org-specific equivalents
+    names(col_types) <- org_cols
+    
+    #col_types <- list(
+    #    ORDER_PROC_ID = readr::col_integer(),
+    #    LINE = readr::col_integer(),
+    #    PAT_ENC_CSN_ID = readr::col_double(),
+    #    ADMIT_CONF_STAT_C = readr::col_integer(),
+    #    DISCH_CONF_STAT_C = readr::col_integer(),
+    #    PAT_ID = readr::col_character(),
+    #    PAT_MRN_ID = readr::col_character(),
+    #    PROC_CODE = readr::col_character(),
+    #    DESCRIPTION = readr::col_character(),
+    #    BASE_NAME = readr::col_character(),
+    #    COMMON_NAME = readr::col_character(),
+    #    ORD_VALUE = readr::col_character(), ## Needs to be coerced to double
+    #    ORDERING_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S%p"),
+    #    ORDER_TIME = readr::col_datetime("%d-%b-%y %H:%M:%S"),
+    #    RESULT_TIME = readr::col_datetime("%d-%b-%y %H:%M:%S"),
+    #    ORDER_STATUS_C = readr::col_integer(),
+    #    RESULT_STATUS_C = readr::col_integer(),
+    #    SERV_AREA_ID = readr::col_character(),
+    #    PARENT_HOSPITAL = readr::col_character()
+    #)
+    
     loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing", basename(path = filename)))
-
-    raw_data <- readr::read_tsv(file = filename,
-                                col_names = TRUE,
-                                col_types = do.call(readr::cols, col_types),
-                                progress = FALSE)
+    
+    #raw_data <- readr::read_tsv(file = filename,
+    #                            col_names = TRUE,
+    #                            col_types = do.call(readr::cols, col_types),
+    #                            progress = FALSE)
+    
+    raw_data <- readr::read_tsv(file = filename, 
+                                col_names = TRUE, 
+                                col_types = do.call(readr::cols, col_types), 
+                                col_select = org_cols, 
+                                show_col_types = FALSE)
+    
+    ## Set column names as SBC equivalents
+    names(raw_data) <- sbc_cols
+    
     ## Stop if no data
     if (nrow(raw_data) < 1) {
         loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
@@ -162,30 +192,58 @@ process_all_cbc_files <- function(data_folder,
 #' Read a single census file data and return it, as is
 #' @param filename the fully qualified path of the file
 #' @param locations a character vector locations of interest
+#' @param org_cols list of target organization's column names (from data mapping)
 #' @return a list of four items, filename, raw_data (tibble), report a
 #'     list consisting of summary tibble, census_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @export
-read_one_census_file <- function(filename, locations) {
+read_one_census_file <- function(filename, locations, 
+                                 org_cols = c("PAT_ID", "LOCATION_NAME", "LOCATION_DT")) {
+    if (length(filename) != 1L){
+        stop("Not enough census files found.")
+    }
+    
+    sbc_cols <- c("PAT_ID", "LOCATION_NAME", "LOCATION_DT")
+    
+    ## Start with SBC names
     col_types <- list(
-        PAT_MRN_ID = readr::col_character(),
         PAT_ID = readr::col_character(),
-        LOCATION_ID = readr::col_integer(),
         LOCATION_NAME = readr::col_character(),
-        EVENT_TYPE = readr::col_character(),
-        LOCATION_DT = readr::col_datetime("%m/%d/%Y  %I:%M:%S%p"),
-        ADMIT_DT = readr::col_datetime("%m/%d/%Y  %I:%M:%S%p"),
-        DISCH_DT = readr::col_character(),
-        CENSUS_INCLUSN_YN = readr::col_character(),
-        PAT_ENC_CSN_ID = readr::col_double(),
-        PARENT_HOSPITAL = readr::col_character()
+        LOCATION_DT = readr::col_datetime("%m/%d/%Y  %I:%M:%S%p")
     )
+    
+    ## Rename essential columns using org-specific equivalents
+    names(col_types) <- org_cols
+    
+    #col_types <- list(
+    #    PAT_MRN_ID = readr::col_character(),
+    #    PAT_ID = readr::col_character(),
+    #    LOCATION_ID = readr::col_integer(),
+    #    LOCATION_NAME = readr::col_character(),
+    #    EVENT_TYPE = readr::col_character(),
+    #    LOCATION_DT = readr::col_datetime("%m/%d/%Y  %I:%M:%S%p"),
+    #    ADMIT_DT = readr::col_datetime("%m/%d/%Y  %I:%M:%S%p"),
+    #    DISCH_DT = readr::col_character(),
+    #    CENSUS_INCLUSN_YN = readr::col_character(),
+    #    PAT_ENC_CSN_ID = readr::col_double(),
+    #    PARENT_HOSPITAL = readr::col_character()
+    #)
 
     loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing", basename(path = filename)))
-    raw_data <- readr::read_tsv(file = filename,
-                                col_names = TRUE,
-                                col_types = do.call(readr::cols, col_types),
-                                progress = FALSE)
+    #raw_data <- readr::read_tsv(file = filename,
+    #                            col_names = TRUE,
+    #                            col_types = do.call(readr::cols, col_types),
+    #                            progress = FALSE)
+    
+    raw_data <- readr::read_tsv(file = filename, 
+                                col_names = TRUE, 
+                                col_types = do.call(readr::cols, col_types), 
+                                col_select = org_cols, 
+                                show_col_types = FALSE)
+    
+    ## Set column names as SBC equivalents
+    names(raw_data) <- sbc_cols
+    
     ## Stop if no data
     if (nrow(raw_data) < 1) {
         loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
@@ -294,36 +352,60 @@ process_all_census_files <- function(data_folder,
 
 #' Read a single transfusion file data and return it, as is
 #' @param filename the fully qualified path of the file
+#' @param org_cols list of target organization's column names (from data mapping)
 #' @return a list of four items, filename, raw_data (tibble), report a
 #'     list consisting of summary tibble, transfusion_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @export
-read_one_transfusion_file <- function(filename) {
+read_one_transfusion_file <- function(filename, 
+                                      org_cols = c("Type", "Issue Date/Time")) {
+    if (length(filename) != 1L){
+        stop("Not enough transfusion files found.")
+    }
+    
+    sbc_cols <- c("Type", "Issue Date/Time")
+
     col_types <- list(
         Type = readr::col_character(),
-        DIN = readr::col_character(),
-        `Product Code` = readr::col_character(),
-        `Donation Code` = readr::col_character(),
-        Division = readr::col_character(),
-        UIP = readr::col_integer(),
-        UnitABO = readr::col_character(),
-        UnitRh = readr::col_character(),
-        `Exp. Date/Time` = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
-        `Issue Date/Time` = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
-        `Issue to Location` = readr::col_character(),
-        `Issue to Sub Location` = readr::col_character(),
-        `Recip. MRN` = readr::col_character(),
-        `Recip. ABO` = readr::col_character(),
-        `Recip. Rh` = readr::col_character()
+        `Issue Date/Time` = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p")
     )
+    
+    names(col_types) <- org_cols
+    
+    # col_types <- list(
+    #     Type = readr::col_character(),
+    #     DIN = readr::col_character(),
+    #     `Product Code` = readr::col_character(),
+    #     `Donation Code` = readr::col_character(),
+    #     Division = readr::col_character(),
+    #     UIP = readr::col_integer(),
+    #     UnitABO = readr::col_character(),
+    #     UnitRh = readr::col_character(),
+    #     `Exp. Date/Time` = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+    #     `Issue Date/Time` = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+    #     `Issue to Location` = readr::col_character(),
+    #     `Issue to Sub Location` = readr::col_character(),
+    #     `Recip. MRN` = readr::col_character(),
+    #     `Recip. ABO` = readr::col_character(),
+    #     `Recip. Rh` = readr::col_character()
+    # )
 
     loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing", basename(path = filename)))
 
-    raw_data <- readr::read_tsv(file = filename,
-                                col_names = TRUE,
-                                col_types = do.call(readr::cols, col_types),
-                                progress = FALSE)
+    #raw_data <- readr::read_tsv(file = filename,
+    #                            col_names = TRUE,
+    #                            col_types = do.call(readr::cols, col_types),
+    #                           progress = FALSE)
     #dates <- unique(sort(as.Date(raw_data$`Issue Date/Time`)))
+    
+    raw_data <- readr::read_tsv(file = filename, 
+                                col_names = TRUE, 
+                                col_types = do.call(readr::cols, col_types), 
+                                col_select = org_cols, 
+                                show_col_types = FALSE)
+    
+    ## Set column names as SBC equivalents
+    names(raw_data) <- sbc_cols
 
     ## Stop if no data
     if (nrow(raw_data) < 1) {
@@ -410,39 +492,62 @@ process_all_transfusion_files <- function(data_folder,
 #' Read a single day surgery file data and return tibble and summary
 #' @param filenames the fully qualified path of the 3 files file
 #' @param services the list of surgery types considered as features
+#' @param org_cols list of target organization's column names (from data mapping)
 #' @return a list of four items, filename, raw_data (tibble), report a
 #'     list consisting of summary tibble, surgery_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @export
-read_one_surgery_file <- function(filename, services) {
+read_one_surgery_file <- function(filename, services, 
+                                  org_cols = c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS")) {
     if (length(filename) != 1L){
         stop("Not enough surgery files found.")
     }
     
+    sbc_cols <- c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS")
+    
     col_types <- list(
         LOG_ID = readr::col_character(),
-        PAT_ID = readr::col_character(),
-        PAT_MRN_ID = readr::col_character(),
-        SURGEON_NAME = readr::col_character(),
         OR_SERVICE = readr::col_character(),
-        ROOM_NAME = readr::col_character(),
         SURGERY_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
-        PROC1 = readr::col_character(),
-        PROC2 = readr::col_character(),
-        PROC3 = readr::col_character(),
         FIRST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
-        LAST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
-        CASE_CLASS = readr::col_character(),
-        PARENT_HOSPITAL = readr::col_character()
+        CASE_CLASS = readr::col_character()
     )
+    
+    names(col_types) <- org_cols
+    
+    #col_types <- list(
+    #    LOG_ID = readr::col_character(),
+    #    PAT_ID = readr::col_character(),
+    #   PAT_MRN_ID = readr::col_character(),
+    #    SURGEON_NAME = readr::col_character(),
+    #    OR_SERVICE = readr::col_character(),
+    #    ROOM_NAME = readr::col_character(),
+    #    SURGERY_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+    #    PROC1 = readr::col_character(),
+    #    PROC2 = readr::col_character(),
+    #    PROC3 = readr::col_character(),
+    #    FIRST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+    #    LAST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+    #    CASE_CLASS = readr::col_character(),
+    #    PARENT_HOSPITAL = readr::col_character()
+    #)
     
     loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing surgery file from", basename(path = filename)))
     
     # Bind the 3 future surgery files together
-    raw_data <- readr::read_tsv(file = filename,
-                                    col_names = TRUE,
-                                    col_types = do.call(readr::cols, col_types),
-                                    progress = FALSE)
+    #raw_data <- readr::read_tsv(file = filename,
+    #                                col_names = TRUE,
+    #                                col_types = do.call(readr::cols, col_types),
+    #                                progress = FALSE)
+    
+    raw_data <- readr::read_tsv(file = filename, 
+                                col_names = TRUE, 
+                                col_types = do.call(readr::cols, col_types), 
+                                col_select = org_cols, 
+                                show_col_types = FALSE)
+    
+    ## Set column names as SBC equivalents
+    names(raw_data) <- sbc_cols
     
     ## Stop if no data
     if (nrow(raw_data) < 1) {
@@ -467,38 +572,64 @@ read_one_surgery_file <- function(filename, services) {
 #'     list consisting of summary tibble, surgery_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @export
-read_next_three_surgery_files <- function(filenames, services) {
+read_next_three_surgery_files <- function(filenames, services, 
+                                          org_cols = c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS")) {
     if (length(filenames) != 3L){
         stop("Not enough future surgery files found.")
     }
-
+    
+    sbc_cols <- c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS")
+    
     col_types <- list(
         LOG_ID = readr::col_character(),
-        PAT_ID = readr::col_character(),
-        PAT_MRN_ID = readr::col_character(),
-        SURGEON_NAME = readr::col_character(),
         OR_SERVICE = readr::col_character(),
-        ROOM_NAME = readr::col_character(),
         SURGERY_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
-        PROC1 = readr::col_character(),
-        PROC2 = readr::col_character(),
-        PROC3 = readr::col_character(),
         FIRST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
-        LAST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
-        CASE_CLASS = readr::col_character(),
-        PARENT_HOSPITAL = readr::col_character()
+        CASE_CLASS = readr::col_character()
     )
+    
+    names(col_types) <- org_cols
+
+    #col_types <- list(
+    #    LOG_ID = readr::col_character(),
+    #    PAT_ID = readr::col_character(),
+    #    PAT_MRN_ID = readr::col_character(),
+    #    SURGEON_NAME = readr::col_character(),
+    #    OR_SERVICE = readr::col_character(),
+    #    ROOM_NAME = readr::col_character(),
+    #    SURGERY_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+    #    PROC1 = readr::col_character(),
+    #    PROC2 = readr::col_character(),
+    #    PROC3 = readr::col_character(),
+    #    FIRST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+    #    LAST_SCHED_DATE = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p"),
+    #    CASE_CLASS = readr::col_character(),
+    #    PARENT_HOSPITAL = readr::col_character()
+    #)
 
     loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing files from", basename(path = filenames[1])))
 
     # Bind the 3 future surgery files together
-    surgery_tbls <- filenames %>% 
-        lapply(readr::read_tsv, 
-               col_names = TRUE, 
-               col_types = do.call(readr::cols, col_types), 
-               progress = FALSE)
+    #surgery_tbls <- filenames %>% 
+    #    lapply(readr::read_tsv, 
+    #           col_names = TRUE, 
+    #           col_types = do.call(readr::cols, col_types), 
+    #           progress = FALSE)
 
+    #raw_data <- do.call(rbind, surgery_tbls)
+    
+    surgery_tbls <- filenames %>%
+        lapply(readr::read_tsv,
+               col_names = TRUE,
+               col_types = do.call(readr::cols, col_types), 
+               col_select = org_cols, 
+               progress = FALSE,
+               show_col_types = FALSE)
+    
     raw_data <- do.call(rbind, surgery_tbls)
+    
+    ## Set column names as SBC equivalents
+    names(raw_data) <- sbc_cols
 
     ## Stop if no data
     if (nrow(raw_data) < 1) {
@@ -889,7 +1020,8 @@ process_data_for_date <- function(config,
     # Process CBC data
     cbc_data <- read_one_cbc_file(cbc_file,
                                   cbc_abnormals = config$cbc_abnormals,
-                                  cbc_vars = config$cbc_vars)
+                                  cbc_vars = config$cbc_vars,
+                                  org_cols = config$org_cbc_cols)
 
     cbc_data$cbc_data %>%
         dplyr::filter(.data$BASE_NAME %in% config$cbc_vars) %>%
@@ -901,7 +1033,8 @@ process_data_for_date <- function(config,
 
     # Process Census data
     census_data <- read_one_census_file(census_file,
-                                        locations = config$census_locations)
+                                        locations = config$census_locations,
+                                        org_cols = config$org_census_cols)
     
     census_data <- census_data$census_data
     
@@ -919,7 +1052,8 @@ process_data_for_date <- function(config,
     
     # Process Surgery data
     surgery_data <- read_next_three_surgery_files(surgery_files,
-                                                  services = config$surgery_services)
+                                                  services = config$surgery_services,
+                                                  org_cols = config$org_surgery_cols)
     
     
     surgery_data$surgery_data %>%
@@ -929,7 +1063,8 @@ process_data_for_date <- function(config,
     
     
     # Process Transfusion data
-    transfusion_data <- read_one_transfusion_file(transfusion_file)
+    transfusion_data <- read_one_transfusion_file(transfusion_file, 
+                                                  org_cols = config$org_transfusion_cols)
 
     transfusion_data$transfusion_data %>%
         dplyr::distinct() %>% # part of original code
@@ -949,8 +1084,6 @@ process_data_for_date <- function(config,
         inventory = NULL
     }
     
-    
-
     list(cbc = cbc,
          census = census,
          surgery = surgery,
@@ -1000,6 +1133,7 @@ read_one_inventory_file <- function(filename, date = NULL) {
 
     loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing", basename(path = filename),
                                                        "for", as.character(date), "inventory"))
+    # For some reason only the inventory is XLSX
     raw_data <- readxl::read_excel(path = filename)
 
     ## Stop if no data

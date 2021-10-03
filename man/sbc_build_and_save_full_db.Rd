@@ -4,10 +4,14 @@
 \alias{sbc_build_and_save_full_db}
 \title{Preprocess all available files and add to database}
 \usage{
-sbc_build_and_save_full_db(conn, config)
+sbc_build_and_save_full_db(conn, config, updateProgress = NULL)
 }
 \arguments{
+\item{conn}{the active database connection object}
+
 \item{config}{the site-specific configuration}
+
+\item{updateProgress}{the callback function to display progress in the shiny app}
 }
 \value{
 nothing (saves an RDS file with the seed data for 1 day before prediction date)

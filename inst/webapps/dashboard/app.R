@@ -16,6 +16,26 @@ paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", packag
 db_path <- "/Users/kaiokada/Desktop/Research/pip.duckdb"
 data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
 
+# Read the column mapping from the sbc_data_mapping file.
+data_mapping_file <- system.file("extdata", "sbc_data_mapping.csv", package = "SBCpip")
+data_mapping <- read.csv(data_mapping_file)
+set_config_param("org_cbc_cols", 
+                 (data_mapping %>% 
+                   dplyr::filter(data_file == "CBC"))$org_data_column_name_to_edit)
+print(get_SBC_config()$org_cbc_cols)
+set_config_param("org_census_cols", 
+                 (data_mapping %>% 
+                    dplyr::filter(data_file == "Census"))$org_data_column_name_to_edit)
+print(get_SBC_config()$org_census_cols)
+set_config_param("org_surgery_cols",
+                 (data_mapping %>% 
+                    dplyr::filter(data_file == "Surgery"))$org_data_column_name_to_edit)
+print(get_SBC_config()$org_surgery_cols)
+set_config_param("org_transfusion_cols", 
+                 (data_mapping %>% 
+                   dplyr::filter(data_file == "Transfusion"))$org_data_column_name_to_edit)
+print(get_SBC_config()$org_transfusion_cols)
+
 intro_line_1 <- 'An application implementing the method described by'
 intro_line_2 <- a(href = sprintf("https://doi.org/%s", paper_citation$doi),
                   sprintf("%s et. al., PNAS %s(%s) %s",
@@ -268,7 +288,7 @@ body <- dashboardBody(
 )
 
 dbHeader <- dashboardHeader()
-##logo_src <- system.file("webapps", "dashboard", "assets", "sbc.png", package = "SBCpip")
+logo_src <- system.file("webapps", "dashboard", "assets", "sbc.png", package = "SBCpip")
 dbHeader$children[[2]]$children <-  tags$a(href='https://stanfordbloodcenter.org',
                                            tags$img(src = 'https://sbcdonor.org/client_assets/images/logos/logo_stanford.png',
                                                     alt = 'Stanford Blood Center Dashboard', height = '40'))

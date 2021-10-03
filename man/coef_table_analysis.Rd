@@ -4,12 +4,14 @@
 \alias{coef_table_analysis}
 \title{Combine projection loss and prediction error calculation into a single evaluation.}
 \usage{
-coef_table_analysis(coef_table, config)
+coef_table_analysis(coef_table, config, top_n = 25L)
 }
 \arguments{
 \item{coef_table, }{the coefficient table generated from SBCpip::build_coefficient_table}
 
 \item{config}{the site-specific configuration}
+
+\item{top_n}{the number of coefficients that are reported in the table}
 }
 \value{
 a list containing the top 20 coefficient by sum of magnitudes over the analyzed period, 

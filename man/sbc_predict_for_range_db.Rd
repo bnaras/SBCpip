@@ -4,7 +4,13 @@
 \alias{sbc_predict_for_range_db}
 \title{Database version of range prediction}
 \usage{
-sbc_predict_for_range_db(conn, pred_start_date, num_days, config)
+sbc_predict_for_range_db(
+  conn,
+  pred_start_date,
+  num_days,
+  config,
+  updateProgress = NULL
+)
 }
 \arguments{
 \item{conn, }{the database connection object}
@@ -15,6 +21,8 @@ date range for the seed dataset.}
 \item{num_days, }{the number of days to predict from pred_start_date}
 
 \item{config}{the site-specific configuration}
+
+\item{updateProgress}{a callback function to update progress for the shiny app (optional)}
 }
 \value{
 a prediction tibble named prediction_df with a column for date and the prediction.

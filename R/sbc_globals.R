@@ -65,8 +65,12 @@ SBC_config <- function() {
         model_update_frequency = 7L, ## every 7 days
         lag_window = 7L,             ## number of previous days to average in smoothing
         l1_bounds = seq(from = 200, to = 0, by = -2), ## allowed values of the l1 bound in cross validation
-        lag_bounds = c(-1)     ## Vector of possible bounds on the seven day moving average parameter (-1 = no bound)
+        lag_bounds = c(-1),     ## Vector of possible bounds on the seven day moving average parameter (-1 = no bound)
         # Was using NA and Inf to denote no bound, but found this to be incompatible with DuckDB
+        org_cbc_cols = c("ORDER_PROC_ID", "BASE_NAME", "RESULT_TIME", "ORD_VALUE"),
+        org_census_cols = c("PAT_ID", "LOCATION_NAME", "LOCATION_DT"),
+        org_surgery_cols = c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS"),
+        org_transfusion_cols = c("Type", "Issue Date/Time")
     )
     result$cbc_vars <- names(result$cbc_quantiles)[seq_len(9L)] ## Ignore HCT
     result$report_folder <- "E:/Blood_Center_Reports"

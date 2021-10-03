@@ -12,7 +12,7 @@ process_data_for_date(
 \arguments{
 \item{config}{a site-specific configuration list}
 
-\item{date}{a string in YYYY-mm-dd format, default today}
+\item{date}{a string in YYYY-mm-dd format, default today (Day i + 1 vs. prediction for i + 1 - i + 3)}
 }
 \value{
 a list of cbc, census, and transfusion tibbles

@@ -30,9 +30,9 @@ License: GPL (>= 2)
 Encoding: UTF-8
 LazyData: true
 Suggests: knitr, rmarkdown
-Imports: dplyr, readr, readxl, writexl, magrittr, tidyselect,
-        lubridate, tidyverse, tibble, ggExtra, shiny, shinydashboard,
-        stringr, tidyr, rlang, pip, loggit, jsonlite, ggplot2, gridExtra, bibtex
+Imports: dplyr, readr (>= 2.0.0), readxl, writexl, magrittr, tidyselect,
+        lubridate, tidyverse (>= 1.3.1), tibble, ggExtra, shiny, shinydashboard, shinyWidgets, 
+        shinyalert, stringr, tidyr, rlang, pip, loggit, jsonlite, ggplot2, gridExtra, bibtex
 RoxygenNote: 7.1.1.9001
 NeedsCompilation: no
 Packaged: 2021-03-19 22:40:54 UTC; naras
