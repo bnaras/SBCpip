@@ -358,14 +358,15 @@ process_all_census_files <- function(data_folder,
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @export
 read_one_transfusion_file <- function(filename, 
-                                      org_cols = c("Type", "Issue Date/Time")) {
+                                      org_cols = c("DIN", "Type", "Issue Date/Time")) {
     if (length(filename) != 1L){
         stop("Not enough transfusion files found.")
     }
     
-    sbc_cols <- c("Type", "Issue Date/Time")
+    sbc_cols <- c("DIN", "Type", "Issue Date/Time")
 
     col_types <- list(
+        DIN = readr::col_character(),
         Type = readr::col_character(),
         `Issue Date/Time` = readr::col_datetime("%m/%d/%Y  %I:%M:%S %p")
     )
@@ -1586,9 +1587,9 @@ predict_for_date_db <- function(conn, config,
         
         ## Provide informative log
         if (multiple_dates_in_increment) {
-            loggit::loggit(log_lvl = "INFO", log_msg = "Multiple dates in data increment, so model training forced")
+            loggit::loggit(log_lvl = "INFO", log_msg = "Multiple dates in data increment so model training forced")
         } else {
-            loggit::loggit(log_lvl = "INFO", log_msg = "Model is stale, so updating model")
+            loggit::loggit(log_lvl = "INFO", log_msg = "Model is stale so updating model")
         }
         
         scaled_dataset <- scale_dataset(training_data) # rescale
@@ -1619,6 +1620,20 @@ predict_for_date_db <- function(conn, config,
                           lag_bound = as.numeric(model$lag_bound),
                           age = 1L) %>% 
             dplyr::relocate(date)
+        
+        if (eval) {
+            # Take this opportunity to evaluate the model
+            pip::evaluate_model(data = data,
+                                c0 = config$c0,
+                                train_window = config$history_window - 14L,
+                                test_window = 14L,
+                                penalty_factor = config$penalty_factor,
+                                lo_inv_limit = config$lo_inv_limit,
+                                hi_inv_limit = config$hi_inv_limit,
+                                start = config$start,
+                                l1_bounds = config$l1_bounds,
+                                lag_bounds = config$lag_bounds)
+        }
         
         
     } else {

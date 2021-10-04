@@ -496,8 +496,9 @@ build_prediction_table_db <- function(conn,
     pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
     pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
     pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
-    pred_mat[i+3,"x_adj"] <- floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) 
-                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"]))
+    pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) 
+                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"])),
+                                 config$c0)
   }
   
   pred_mat[, "Alert"] <- (pred_mat[, "r1"] + pred_mat[, "r2"] <= min_inventory)
@@ -707,8 +708,8 @@ projection_loss <- function(pred_table, config) {
   last_day <- nrow(pred_table) - 3L
   pred_table_trunc <- pred_table[seq(first_day, last_day), , drop = FALSE]
   
-  loss <- pip::compute_loss(preds = pred_table_trunc$`Three-day prediction`, 
-                            y = pred_table$`Platelet usage`,
+  loss <- pip::compute_loss(preds = matrix(pred_table_trunc$`Three-day prediction`, ncol = 1), 
+                            y = pred_table$`Platelet usage`[seq(first_day, nrow(pred_table))],
                             w = matrix(pred_table_trunc$Waste, ncol = 1),
                             r1 = matrix(pred_table_trunc$`No. expiring in 1 day`, ncol = 1),
                             r2 = matrix(pred_table_trunc$`No. expiring in 2 days`, ncol = 1),
@@ -755,8 +756,9 @@ real_loss <- function(pred_table, config) {
     pred_table_trunc$`Fresh Units Collected` -
     pred_table_trunc$`Platelet usage`
   
-  loss <- pip::compute_loss(preds = pred_table_trunc$`Three-day prediction`, 
-                            y = pred_table$`Platelet usage`,
+  
+  loss <- pip::compute_loss(preds = matrix(pred_table_trunc$`Three-day actual usage`, ncol = 1), 
+                            y = pred_table$`Platelet usage`[seq(first_day, nrow(pred_table))],
                             w = matrix(pred_table_trunc$`True Waste`, ncol = 1),
                             r1 = matrix(remaining_inventory, ncol = 1),
                             r2 = matrix(remaining_inventory, ncol = 1), # This is incorrect. Need to break up remaining_inventory

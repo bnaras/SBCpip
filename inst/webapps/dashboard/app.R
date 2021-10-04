@@ -174,6 +174,7 @@ body <- dashboardBody(
                 )
                 , box(
                   h3("Feature Names")
+                  , actionButton(inputId = "refreshFeatures", label = "Refresh Features")
                   , textAreaInput(inputId = "cbc_features", label = "CBC Features List", value = paste0(SBCpip::get_SBC_config()$cbc_vars, collapse = ", "))
                   , textAreaInput(inputId = "census_features", label = "Census Features List", value = paste0(SBCpip::get_SBC_config()$census_locations, collapse = ", "))
                   , textAreaInput(inputId = "surgery_features", label = "Surgery Features List", value = paste0(SBCpip::get_SBC_config()$surgery_services, collapse = ", "))
@@ -213,10 +214,15 @@ body <- dashboardBody(
                                 , min = 50
                                 , max = 300
                                 , value = 100)
+                  , sliderInput(inputId = "lag_window"
+                                , label = "Moving Average Lag Window (days)"
+                                , min = 1
+                                , max = 14
+                                , value = 7)
                   , sliderInput(inputId = "start"
                                 , label = "Skip Initial (days):"
-                                , min = 5
-                                , max = 25
+                                , min = 1
+                                , max = 15
                                 , value = 10)
                   , sliderInput(inputId = "model_update_frequency"
                                 , label = "Model Update Frequency (days):"
@@ -365,6 +371,63 @@ server <- function(input, output, session) {
     stopApp(TRUE)
   })
   
+  # Refresh possible features to choose from based on available data files
+  observeEvent(input$refreshFeatures, {
+    # Folder names
+    set_config_param("data_folder", input$data_folder)
+    set_config_param("log_folder", input$log_folder)
+    
+    # File prefixes
+    set_config_param("cbc_filename_prefix", input$cbc_filename_prefix)
+    set_config_param("census_filename_prefix", input$census_filename_prefix)
+    set_config_param("surgery_filename_prefix", input$surgery_filename_prefix)
+    set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
+    set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
+    
+    config <- SBCpip::get_SBC_config()
+    
+    # Grab CBC Features
+    cbcFilename <- tail(list.files(path = config$data_folder, 
+                                   pattern = config$cbc_filename_prefix, 
+                                   full.names = TRUE), 1L)
+    
+    cbcData <- readr::read_tsv(file = cbcFilename, 
+                               col_names = TRUE, 
+                               show_col_types = FALSE)
+    
+    cbcFeatures <- unique(cbcData[[config$org_cbc_cols[2]]])
+    
+    updateTextInput(session, inputId = "cbc_features", value = paste0(sort(cbcFeatures), collapse = ", "))
+    
+    # Grab Census Features
+    censusFilename <- tail(list.files(path = config$data_folder, 
+                                   pattern = config$census_filename_prefix, 
+                                   full.names = TRUE), 1L)
+    
+    censusData <- readr::read_tsv(file = censusFilename, 
+                               col_names = TRUE, 
+                               show_col_types = FALSE)
+    
+    censusFeatures <- unique(censusData[[config$org_census_cols[2]]])
+    
+    updateTextInput(session, inputId = "census_features", value = paste0(sort(censusFeatures), collapse = ", "))
+    
+    # Grab Surgery Features
+    surgeryFilename <- tail(list.files(path = config$data_folder, 
+                                      pattern = config$surgery_filename_prefix, 
+                                      full.names = TRUE), 1L)
+    
+    surgeryData <- readr::read_tsv(file = surgeryFilename, 
+                                  col_names = TRUE, 
+                                  show_col_types = FALSE)
+    
+    surgeryFeatures <- unique(surgeryData[[config$org_surgery_cols[2]]])
+    
+    updateTextInput(session, inputId = "surgery_features", value = paste0(sort(surgeryFeatures), collapse = ", "))
+    
+  })
+  
+  # Set the database build configurations
   observeEvent(input$setDBValues, {
     # Folder names
     set_config_param("data_folder", input$data_folder)
@@ -404,9 +467,10 @@ server <- function(input, output, session) {
     
     # Other model/prediction/validation parameters
     set_config_param("history_window", input$history_window)
+    set_config_param("lag_window", input$lag_window)
     set_config_param("start", input$start)
     set_config_param("model_update_frequency", input$model_update_frequency)
-    set_config_param("l1_bounds", seq(from = input$l1_bound_range[2], to = input$l1_bound_range[1], by = -1))
+    set_config_param("l1_bounds", seq(from = input$l1_bound_range[2], to = input$l1_bound_range[1], by = -2))
     #set_config_param("lag_bounds", c(-1, input$lag_bound))
     set_config_param("lag_bounds", c(-1)) # lag_bound is rarely needed given fix to model training
     

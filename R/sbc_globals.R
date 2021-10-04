@@ -70,7 +70,7 @@ SBC_config <- function() {
         org_cbc_cols = c("ORDER_PROC_ID", "BASE_NAME", "RESULT_TIME", "ORD_VALUE"),
         org_census_cols = c("PAT_ID", "LOCATION_NAME", "LOCATION_DT"),
         org_surgery_cols = c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS"),
-        org_transfusion_cols = c("Type", "Issue Date/Time")
+        org_transfusion_cols = c("DIN", "Type", "Issue Date/Time")
     )
     result$cbc_vars <- names(result$cbc_quantiles)[seq_len(9L)] ## Ignore HCT
     result$report_folder <- "E:/Blood_Center_Reports"

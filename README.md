@@ -21,9 +21,10 @@ library(devtools)
 devtools::install_github("bnaras/SBCpip")
 ```
 ## How to use this package
-Most of the functionality of this package can be accessed either using a Shiny Dashboard interface or running the appropriate R functions separately. To start the Shiny Dashboard, simply run the following R command:
+Most of the functionality of this package can be accessed either using a Shiny Dashboard interface or running the appropriate R functions separately. To start the Shiny Dashboard, simply run the following R commands:
 
 ```{r}
+library(SBCpip)
 sbc_dashboard()
 ```
 
@@ -65,8 +66,9 @@ should include a table of mappings from their corresponding column headers to th
 	* OR_SERVICE: Specific type of surgery to be carried out. [Character]
 
 4. **Transfusion:**
+	* DIN: Donation Identification Number that uniquely identifies the transfused unit [Character]
 	* Issue Date/Time: Datetime when component is transfused to patient [Datetime("%m/%d/%Y  %I:%M:%S %p")]
-	* Type: Specific blood cell / component type being transfused. We focus on “PLT” [Character].
+	* Type: Specific blood cell / component type being transfused. We focus on “PLT” [Character]
 
 5. **Inventory:** Blood products collected and available in inventory for issue to hospital / transfusions. We use this to compare model performance to actual historical protocol (1 row = 1 unit).
 	* Inv. ID: Unique identifier for product in inventory
