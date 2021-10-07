@@ -11,10 +11,12 @@ Surgery,OR_SERVICE,Specific type of surgery to be carried out,Character,OR_SERVI
 Surgery,SURGERY_DATE,Datetime of surgical operation,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",SURGERY_DATE
 Surgery,FIRST_SCHED_DATE,Datetime indicating when procedure was first scheduled,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",FIRST_SCHED_DATE
 Surgery,CASE_CLASS,Indicator of whether surgery is “Elective” or “Urgent”,Character,CASE_CLASS
-Transfusion,DIN,Donation Identification Number that uniquely identifies the unit transfused,Character,DIN
+Transfusion,DIN,Donation Identification Number that uniquely identifies the group of units transfered,Character,DIN
+Transfusion,Product Code,Code that uniquely identifies the product,Character,Product Code
 Transfusion,Type,Specific blood cell / component type being transfused. We focus on “PLT”,Character,Type
 Transfusion,Issue Date/Time,Datetime when component is transfused to patient ,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",Issue Date/Time
 Inventory,Inv. ID,Unique identifier for product in inventory,Character,Inv. ID
 Inventory,Type,The specific type of transfusable product (e.g. “PLT”),Character,Type
 Inventory,Days to Expire,Number of days after which unit is considered expired,Integer,Days to Expire
 Inventory,Exp. Date,Specific date on which unit is set to expire,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",Exp. Date
+Inventory,Exp. Time,Specific time on which unit is set to expire,Double,Exp. Time

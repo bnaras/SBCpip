@@ -4,10 +4,17 @@
 \alias{read_one_surgery_file}
 \title{Read a single day surgery file data and return tibble and summary}
 \usage{
-read_one_surgery_file(filename, services)
+read_one_surgery_file(
+  filename,
+  services,
+  org_cols = c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE",
+    "CASE_CLASS")
+)
 }
 \arguments{
 \item{services}{the list of surgery types considered as features}
+
+\item{org_cols}{list of target organization's column names (from data mapping)}
 
 \item{filenames}{the fully qualified path of the 3 files file}
 }

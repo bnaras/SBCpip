@@ -4,7 +4,12 @@
 \alias{read_one_cbc_file}
 \title{Read a single cbc file data and return it, as is}
 \usage{
-read_one_cbc_file(filename, cbc_abnormals, cbc_vars)
+read_one_cbc_file(
+  filename,
+  cbc_abnormals,
+  cbc_vars,
+  org_cols = c("ORDER_PROC_ID", "BASE_NAME", "RESULT_TIME", "ORD_VALUE")
+)
 }
 \arguments{
 \item{filename}{the fully qualified path of the file}
@@ -12,7 +17,9 @@ read_one_cbc_file(filename, cbc_abnormals, cbc_vars)
 \item{cbc_abnormals, }{a named list of functions of a single vector
 returning TRUE for abnormal values}
 
-\item{cbc_vars, }{the names of fields to include; others are excluded}
+\item{cbc_vars, }{the names of values to include; others are excluded}
+
+\item{org_cols, }{the names of columns at the target organization (specified in data mapping)}
 }
 \value{
 a list of four items, filename, raw_data (tibble), report a

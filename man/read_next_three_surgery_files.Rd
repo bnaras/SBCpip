@@ -4,7 +4,12 @@
 \alias{read_next_three_surgery_files}
 \title{Read a surgery file data  for following 3 days and return tibble and summary}
 \usage{
-read_next_three_surgery_files(filenames, services)
+read_next_three_surgery_files(
+  filenames,
+  services,
+  org_cols = c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE",
+    "CASE_CLASS")
+)
 }
 \arguments{
 \item{filenames}{the fully qualified path of the 3 files file}

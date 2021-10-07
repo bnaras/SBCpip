@@ -4,12 +4,18 @@
 \alias{read_one_census_file}
 \title{Read a single census file data and return it, as is}
 \usage{
-read_one_census_file(filename, locations)
+read_one_census_file(
+  filename,
+  locations,
+  org_cols = c("PAT_ID", "LOCATION_NAME", "LOCATION_DT")
+)
 }
 \arguments{
 \item{filename}{the fully qualified path of the file}
 
 \item{locations}{a character vector locations of interest}
+
+\item{org_cols}{list of target organization's column names (from data mapping)}
 }
 \value{
 a list of four items, filename, raw_data (tibble), report a

@@ -25,8 +25,6 @@ The configuration is a list of items.
   \item{\code{initial_expiry_data}}{the number of units expiring a day after prediction begins and one day after that, i.e. a 2-vector}
   \item{\code{initial_collection_data}}{the number of units to collect on the prediction day, a day after, and another day after, i.e. a 3-vector}
   \item{\code{data_folder}}{full path of location of raw data files}
-  \item{\code{report_folder}}{full path of where reports should go, must exist}
-  \item{\code{output_folder}}{full path of where processed output data should go, must exist}
   \item{\code{log_folder}}{full path of where logs should go, must exist}
   \item{\code{model_update_frequency}}{how often to update the model, default 7 days}
   \item{\code{lag_window}}{number of previous days to average in smoothing, default 7 days}

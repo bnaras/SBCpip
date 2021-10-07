@@ -4,10 +4,16 @@
 \alias{read_one_inventory_file}
 \title{Read a single inventory file and return it, as is}
 \usage{
-read_one_inventory_file(filename, date = NULL)
+read_one_inventory_file(
+  filename,
+  org_cols = c("Inv. ID", "Type", "Days to Expire", "Exp. Date", "Exp. Time"),
+  date = NULL
+)
 }
 \arguments{
 \item{filename}{the fully qualified path of the file}
+
+\item{org_cols}{the organization-specific column names corresponding to SBC columns}
 
 \item{date}{an optional date of inventory in case the date is not
 to be automatically inferred as the day before the date in the

@@ -305,8 +305,10 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
   t_pred <- prediction_df$t_pred
   initial_expiry_data <- config$initial_expiry_data
   pred_mat <- matrix(0, nrow = N + 3, ncol = 11)
-  colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s", #"t_adj",
+  colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s", 
                           "r1_adj", "r2_adj","w_adj", "x_adj", "s_adj")
+  
+  yma <- ma(y, window_size = config$start)
   
   pred_mat[offset + (1:3), "x"] <- config$initial_collection_data
   pred_mat[offset + (1:3), "x_adj"] <- config$initial_collection_data
@@ -316,7 +318,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
   pred_mat[index, "r1"] <- pred_mat[index, "r1_adj"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
   pred_mat[index, "s"] <- pred_mat[index, "s_adj"] <- pip::pos(y[1] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
   pred_mat[index, "r2"] <- pred_mat[index, "r2_adj"] <- pip::pos(pred_mat[1, "x"] - pip::pos(y[1]- initial_expiry_data[1] - initial_expiry_data[2]))
-  pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- max(floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1)),
+  pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- max(floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - min(pred_mat[index, "r1"], yma[index]) - pred_mat[index, "r2"] + 1)),
                                                                   config$c0)
   
   for (i in seq.int(index + 1L, N)) {
@@ -325,7 +327,7 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
     pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
     pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
-    pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1)), 
+    pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] -min(pred_mat[i, "r1"], yma[i]) - pred_mat[i, "r2"] + 1)), 
                                 config$c0)
     
     # This set ensures that we have collected not only enough to satisfy our prediction, but
@@ -334,8 +336,8 @@ build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2
     pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
     pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
     pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
-    pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) 
-                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"])), 
+    pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i,"r2_adj"]) 
+                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i, "r2_adj"])), 
                                  config$c0)
   }
   
@@ -467,18 +469,21 @@ build_prediction_table_db <- function(conn,
   t_pred <- pred_tbl_joined$t_pred
   initial_expiry_data <- config$initial_expiry_data
   pred_mat <- matrix(0, nrow = N + 3, ncol = 11)
-  colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s", #"t_adj",
+  colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s",
                           "r1_adj", "r2_adj","w_adj", "x_adj", "s_adj")
   
   pred_mat[offset + (1:3), "x"] <- config$initial_collection_data
   pred_mat[offset + (1:3), "x_adj"] <- config$initial_collection_data
   index <- offset + 1
   
+  # Moving average usage that we use to diagnose "high" levels of r1 (impending waste)
+  yma <- ma(y, window_size = config$start)
+  
   pred_mat[index, "w"] <- pred_mat[index, "w_adj"] <- pip::pos(initial_expiry_data[1] - y[index])
   pred_mat[index, "r1"] <- pred_mat[index, "r1_adj"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
   pred_mat[index, "s"] <- pred_mat[index, "s_adj"] <- pip::pos(y[1] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
   pred_mat[index, "r2"] <- pred_mat[index, "r2_adj"] <- pip::pos(pred_mat[1, "x"] - pip::pos(y[1]- initial_expiry_data[1] - initial_expiry_data[2]))
-  pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- max(floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - pred_mat[index, "r1"] - pred_mat[index, "r2"] + 1)),
+  pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- max(floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - min(pred_mat[index, "r1"], yma[index]) - pred_mat[index, "r2"] + 1)),
                                                                   config$c0)
   
   for (i in seq.int(index + 1L, N)) {
@@ -487,7 +492,7 @@ build_prediction_table_db <- function(conn,
     pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
     pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
     pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
-    pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - pred_mat[i, "r1"] - pred_mat[i, "r2"] + 1)), 
+    pred_mat[i+3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - min(pred_mat[i, "r1"], yma[i]) - pred_mat[i, "r2"] + 1)), 
                                 config$c0)
     
     # This set ensures that we have collected not only enough to satisfy our prediction, but
@@ -496,8 +501,8 @@ build_prediction_table_db <- function(conn,
     pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
     pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
     pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
-    pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - pred_mat[i, "r1_adj"] - pred_mat[i,"r2_adj"]) 
-                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - pred_mat[i, "r1_adj"] - pred_mat[i, "r2_adj"])),
+    pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i,"r2_adj"]) 
+                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i, "r2_adj"])),
                                  config$c0)
   }
   
@@ -510,8 +515,7 @@ build_prediction_table_db <- function(conn,
     inventory
   
   tibble::as_tibble(cbind(pred_tbl_joined, pred_mat[seq_len(N), ])) %>%
-    dplyr::mutate(t_true = dplyr::lead(plt_used, 1L) + dplyr::lead(plt_used, 2L) + dplyr::lead(plt_used, 3L) 
-    ) %>%
+    dplyr::mutate(t_true = dplyr::lead(plt_used, 1L) + dplyr::lead(plt_used, 2L) + dplyr::lead(plt_used, 3L)) %>%
     dplyr::relocate(t_true, .after = plt_used) %>%
     dplyr::left_join(inventory, by = "date") ->
     pred_table
@@ -856,7 +860,7 @@ coef_table_analysis <- function(coef_table, config, top_n = 25L) {
   # sum the absolute values of all of the coefficients (except intercept). 
   # Display 20 coefficients in order of largest absolute sums and state average value over period
   coef_table %>% 
-    dplyr::select(-c(intercept, l1_bound, lag_bound, age)) %>%
+    dplyr::select(-c(intercept, lag_bound, age)) %>%
     tidyr::pivot_longer(-c(date), names_to = "feat") %>%
     dplyr::mutate(abs_val = abs(value)) %>%
     dplyr::group_by(feat) %>%

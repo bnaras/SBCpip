@@ -8,33 +8,30 @@ library(gridExtra)
 library(bibtex)
 library(DBI)
 library(duckdb)
-#library(future)
-#library(promises)
-#plan(multisession)
 
 paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", package = "SBCpip"))
-db_path <- "/Users/kaiokada/Desktop/Research/pip.duckdb"
+#db_path <- "/Users/kaiokada/Desktop/Research/pip.duckdb"
 data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
 
 # Read the column mapping from the sbc_data_mapping file.
 data_mapping_file <- system.file("extdata", "sbc_data_mapping.csv", package = "SBCpip")
 data_mapping <- read.csv(data_mapping_file)
+
 set_config_param("org_cbc_cols", 
                  (data_mapping %>% 
                    dplyr::filter(data_file == "CBC"))$org_data_column_name_to_edit)
-print(get_SBC_config()$org_cbc_cols)
 set_config_param("org_census_cols", 
                  (data_mapping %>% 
                     dplyr::filter(data_file == "Census"))$org_data_column_name_to_edit)
-print(get_SBC_config()$org_census_cols)
 set_config_param("org_surgery_cols",
                  (data_mapping %>% 
                     dplyr::filter(data_file == "Surgery"))$org_data_column_name_to_edit)
-print(get_SBC_config()$org_surgery_cols)
 set_config_param("org_transfusion_cols", 
                  (data_mapping %>% 
-                   dplyr::filter(data_file == "Transfusion"))$org_data_column_name_to_edit)
-print(get_SBC_config()$org_transfusion_cols)
+                    dplyr::filter(data_file == "Transfusion"))$org_data_column_name_to_edit)
+set_config_param("org_inventory_cols",
+                 (data_mapping %>%
+                    dplyr::filter(data_file == "Inventory"))$org_data_column_name_to_edit)
 
 intro_line_1 <- 'An application implementing the method described by'
 intro_line_2 <- a(href = sprintf("https://doi.org/%s", paper_citation$doi),
@@ -103,6 +100,7 @@ sidebar <- dashboardSidebar(
       , dateInput(inputId = "startDate", label = "Start Date", value = "2018-04-10")
       , dateInput(inputId = "endDate", label = "End Date", value = as.character(Sys.Date()))
       , actionButton(inputId = "predictionSummaryButton", "Validate Model")
+      , actionButton(inputId = "standaloneSummaryButton", "Summary Table")
     )
     , menuItem("Predict for Today", icon = icon("caret-right"), tabName = "prediction")
     , conditionalPanel(
@@ -126,9 +124,6 @@ sidebar <- dashboardSidebar(
       condition = "input.tabId == 'coefPlots'"
       , dateInput(inputId = "coefPlotDateStart", label = "Start Date", value = "2018-04-10")
       , dateInput(inputId = "coefPlotDateEnd", label = "End Date", value = as.character(Sys.Date()))
-      #, selectInput(inputId = "coefList", 
-      #              label = "Coefficient to Plot:",
-      #              choices = c("None"))
       , actionButton(inputId = "plotCoefButton", "Plot Coefficients")
     )
     , actionButton(inputId = "exitApp", "Exit")
@@ -188,24 +183,19 @@ body <- dashboardBody(
                   h3("Inventory Requirements for Model")
                   , sliderInput(inputId = "c0"
                                 , label = "Minimum Remaining Fresh Units at EOD - c0 (units):"
-                                , min = 10
+                                , min = 0
                                 , max = 50
                                 , value = get_SBC_config()$c0)
                   , sliderInput(inputId = "loss_inventory_range"
-                                , label = "Acceptable Inventory for Loss Penalty (units):"
+                                , label = "Cross-Validation Prediction Bias (units):"
                                 , min = 0
                                 , max = 100
-                                , value = c(get_SBC_config()$lo_inv_limit, get_SBC_config()$hi_inv_limit))
+                                , value = get_SBC_config()$lo_inv_limit)
                   , sliderInput(inputId = "penalty_factor"
                                 , label = "Shortage Penalty Factor (X unit Wasted : 1 units Short):"
                                 , min = 0
                                 , max = 20
-                                , value = 5)
-                  #, sliderInput(inputId = "min_inventory" # Can possibly get rid of this
-                  #              , label = "Minimum Total Inventory for Projection (units):"
-                  #              , min = 0
-                  #              , max = 50
-                  #              , value = get_SBC_config()$min_inventory)
+                                , value = get_SBC_config()$penalty_factor)
                 )
                 , box(
                   h3("Other Model Fitting Parameters")
@@ -233,7 +223,7 @@ body <- dashboardBody(
                                 , label = "Range of L1 Bounds on Model Coefs:"
                                 , min = 0
                                 , max = 200
-                                , value = c(2, 50)
+                                , value = c(0, 60)
                                 , step = 2)
                   , sliderInput(inputId = "lag_bound"
                                 , label = "Bound on Seven-Day Usage Lag Coef:"
@@ -311,7 +301,7 @@ ui <- dashboardPage(
   , skin = "green"
 )
 
-fetch_data_for_dates <- function(req_start_date, req_end_date, table_name) {
+fetch_data_for_dates <- function(req_start_date, req_end_date, table_name, db_path) {
   # Connect to duckdb database hosted on a local file
   if (req_end_date < req_start_date) return("End date must be at or after start date.")
   
@@ -360,10 +350,11 @@ server <- function(input, output, session) {
   parse_vars <- function(v) unlist(lapply(strsplit(as.character(v), split = ","), trimws))
   
   all_active_features <- reactive({
-    
-    all_active_features <- c(sapply(parse_vars(input$cbc_features), function(x) paste0(x, "_Nq")),
-                      parse_vars(input$census_features),
-                      parse_vars(input$surgery_features))
+    fixed_features <- c("intercept", "lag", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+    all_active_features <- c(fixed_features, 
+                             sapply(parse_vars(input$cbc_features), function(x) paste0(x, "_Nq")),
+                             parse_vars(input$census_features),
+                             parse_vars(input$surgery_features))
   })
   
   # Exit the app
@@ -444,8 +435,7 @@ server <- function(input, output, session) {
     set_config_param("cbc_vars", parse_vars(input$cbc_features))
     set_config_param("census_locations", parse_vars(input$census_features))
     set_config_param("surgery_services", parse_vars(input$surgery_features))
-    
-    db_path <- input$database_path
+    set_config_param("database_path", input$database_path)
     
     # Update the coefficients 
     updateMultiInput(session, 
@@ -471,9 +461,7 @@ server <- function(input, output, session) {
     set_config_param("start", input$start)
     set_config_param("model_update_frequency", input$model_update_frequency)
     set_config_param("l1_bounds", seq(from = input$l1_bound_range[2], to = input$l1_bound_range[1], by = -2))
-    #set_config_param("lag_bounds", c(-1, input$lag_bound))
-    set_config_param("lag_bounds", c(-1)) # lag_bound is rarely needed given fix to model training
-    
+    set_config_param("lag_bounds", c(-1, input$lag_bound))
     
     loggit::loggit(log_lvl = "INFO", log_msg = "Settings saved.")
 
@@ -483,7 +471,9 @@ server <- function(input, output, session) {
   
   # Clear currently cached predictions
   observeEvent(input$clearPredCache, {
-    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    config <- SBCpip::get_SBC_config()
+    
+    db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
     on.exit({
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
     }, add = TRUE)
@@ -511,7 +501,7 @@ server <- function(input, output, session) {
       progress$inc(amount = 5/n_files, detail = detail) # 5 types of files
     }
     
-    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
     on.exit({
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
     }, add = TRUE)
@@ -537,7 +527,12 @@ server <- function(input, output, session) {
     req(input$cbcDateStart)
     req(input$cbcDateEnd)
     
-    fetch_data_for_dates(input$cbcDateStart, input$cbcDateEnd, "cbc")
+    config <- SBCpip::get_SBC_config()
+    
+    fetch_data_for_dates(input$cbcDateStart, 
+                         input$cbcDateEnd, 
+                         "cbc", 
+                         config$database_path)
   })
   output$cbcSummary <- renderTable({
     cbcSummary()
@@ -547,8 +542,13 @@ server <- function(input, output, session) {
   censusSummary <- eventReactive(input$censusSummaryButton, {
     req(input$censusDateStart)
     req(input$censusDateEnd)
+    
+    config <- SBCpip::get_SBC_config()
 
-    fetch_data_for_dates(input$censusDateStart, input$censusDateEnd, "census")
+    fetch_data_for_dates(input$censusDateStart, 
+                         input$censusDateEnd, 
+                         "census", 
+                         config$database_path)
   })
   output$censusSummary <- renderTable({
     censusSummary()
@@ -558,8 +558,13 @@ server <- function(input, output, session) {
   surgerySummary <- eventReactive(input$surgerySummaryButton, {
     req(input$surgeryDateStart)
     req(input$surgeryDateEnd)
+    
+    config <- SBCpip::get_SBC_config()
 
-    fetch_data_for_dates(input$surgeryDateStart, input$surgeryDateEnd, "surgery")
+    fetch_data_for_dates(input$surgeryDateStart, 
+                         input$surgeryDateEnd, 
+                         "surgery",
+                         config$database_path)
   })
   output$surgerySummary <- renderTable({
     surgerySummary()
@@ -569,8 +574,13 @@ server <- function(input, output, session) {
   inventorySummary <- eventReactive(input$inventorySummaryButton, {
     req(input$inventoryDateStart)
     req(input$inventoryDateEnd)
+    
+    config <- SBCpip::get_SBC_config()
 
-    fetch_data_for_dates(input$inventoryDateStart, input$inventoryDateEnd, "inventory")
+    fetch_data_for_dates(input$inventoryDateStart, 
+                         input$inventoryDateEnd, 
+                         "inventory",
+                         config$database_path)
   })
   output$inventorySummary <- renderTable({
     inventorySummary()
@@ -587,7 +597,7 @@ server <- function(input, output, session) {
     
     config <- SBCpip::get_SBC_config()
     
-    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
     on.exit({
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
     }, add = TRUE)
@@ -666,7 +676,7 @@ server <- function(input, output, session) {
     
     # Eventually will want to add future_promise here for scalability. Not including this
     # for now as the resulting functionality is the same with a single session.
-    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
     on.exit({
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
     }, add = TRUE)
@@ -714,7 +724,7 @@ server <- function(input, output, session) {
     
     config <- SBCpip::get_SBC_config()
     
-    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
     
     on.exit({
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
@@ -772,7 +782,7 @@ server <- function(input, output, session) {
     
     config <- SBCpip::get_SBC_config()
     
-    db <- DBI::dbConnect(duckdb::duckdb(), db_path, read_only = FALSE)
+    db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
     
     on.exit({
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 

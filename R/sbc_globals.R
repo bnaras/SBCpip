@@ -45,32 +45,32 @@ SBC_config <- function() {
                              "Hepatology",
                              "General", 
                              "Interventional Radiology"), # Counts of types of surgeries conducted (OR_SERVICE)
-        c0 = 15, ## value for c0 to use in training model
+        c0 = 10, ## value for c0 to use in training model
         min_inventory = 30, ## the minimum inventory
         history_window = 200,  ## how many days to use in training
-        penalty_factor = 5,   ## penalty factor to use in training
-        lo_inv_limit = 30,    ## inventory count below which we penalize result 
+        penalty_factor = 15,   ## penalty factor to use in training
+        lo_inv_limit = 10,    ## inventory count below which we penalize result 
         hi_inv_limit = 60,    ## inventory count above which we penalize result
         start = 10, ## the day we start the model evaluation
         initial_collection_data = c(60, 60, 60), ## the initial number that will be collected for the first three days
         initial_expiry_data = c(0, 0), ## the number of units that expire a day after, and two days after respectively
         data_folder = "E:/platelet_predict_daily_data", ## Shared folder for Blood Center
+        database_path =  "E:/database.duckdb", 
         cbc_filename_prefix = "LAB-BB-CSRP-CBC_Daily",
         census_filename_prefix = "LAB-BB-CSRP-Census_Daily",
         transfusion_filename_prefix = "LAB-BB-CSRP-Transfused Product Report_Daily",
         inventory_filename_prefix = "Daily_Product_Inventory_Report_Morning_To_Folder",
         surgery_filename_prefix = "LAB-BB-CSRP-Surgery_Daily",
-        #output_filename_prefix = "pip-output-%s.RDS",
         log_filename_prefix = "SBCpip_%s.json",
         model_update_frequency = 7L, ## every 7 days
         lag_window = 7L,             ## number of previous days to average in smoothing
         l1_bounds = seq(from = 200, to = 0, by = -2), ## allowed values of the l1 bound in cross validation
-        lag_bounds = c(-1),     ## Vector of possible bounds on the seven day moving average parameter (-1 = no bound)
-        # Was using NA and Inf to denote no bound, but found this to be incompatible with DuckDB
-        org_cbc_cols = c("ORDER_PROC_ID", "BASE_NAME", "RESULT_TIME", "ORD_VALUE"),
-        org_census_cols = c("PAT_ID", "LOCATION_NAME", "LOCATION_DT"),
-        org_surgery_cols = c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS"),
-        org_transfusion_cols = c("DIN", "Type", "Issue Date/Time")
+        lag_bounds = c(-1, 10),     ## Vector of possible bounds on the seven day moving average parameter (-1 = no bound)
+        org_cbc_cols = c("ORDER_PROC_ID", "BASE_NAME", "RESULT_TIME", "ORD_VALUE"), ## organization's relevant CBC column headers
+        org_census_cols = c("PAT_ID", "LOCATION_NAME", "LOCATION_DT"),              ## organization's relevant Census column headers
+        org_surgery_cols = c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS"), ## organization's relevant Surgery column headers
+        org_transfusion_cols = c("DIN", "Product Code", "Type", "Issue Date/Time"), ## organization's relevant Transfusion column headers
+        org_inventory_cols = c("Inv. ID", "Type", "Days to Expire", "Exp. Date", "Exp. Time")   ## organization's relevant Inventory column headers
     )
     result$cbc_vars <- names(result$cbc_quantiles)[seq_len(9L)] ## Ignore HCT
     result$report_folder <- "E:/Blood_Center_Reports"
@@ -101,8 +101,6 @@ sbc_config <- SBC_config()
 #'   \item{\code{initial_expiry_data}}{the number of units expiring a day after prediction begins and one day after that, i.e. a 2-vector}
 #'   \item{\code{initial_collection_data}}{the number of units to collect on the prediction day, a day after, and another day after, i.e. a 3-vector}
 #'   \item{\code{data_folder}}{full path of location of raw data files}
-#'   \item{\code{report_folder}}{full path of where reports should go, must exist}
-#'   \item{\code{output_folder}}{full path of where processed output data should go, must exist}
 #'   \item{\code{log_folder}}{full path of where logs should go, must exist}
 #'   \item{\code{model_update_frequency}}{how often to update the model, default 7 days}
 #'   \item{\code{lag_window}}{number of previous days to average in smoothing, default 7 days}

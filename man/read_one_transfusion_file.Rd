@@ -4,10 +4,15 @@
 \alias{read_one_transfusion_file}
 \title{Read a single transfusion file data and return it, as is}
 \usage{
-read_one_transfusion_file(filename)
+read_one_transfusion_file(
+  filename,
+  org_cols = c("DIN", "Product Code", "Type", "Issue Date/Time")
+)
 }
 \arguments{
 \item{filename}{the fully qualified path of the file}
+
+\item{org_cols}{list of target organization's column names (from data mapping)}
 }
 \value{
 a list of four items, filename, raw_data (tibble), report a
