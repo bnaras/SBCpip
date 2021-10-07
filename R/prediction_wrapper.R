@@ -810,8 +810,8 @@ prediction_error <- function(pred_table, config) {
   tot_err <- pos_err + neg_err
   
   prediction_error[["Overall"]] <- sqrt(tot_err / nrow(pred_table_trunc))
-  prediction_error[["Pos."]] <- if (pos_err > 0) sqrt(pos_err / sum(pred_table_trunc$`Three-day actual usage` < pred_table_trunc$`Three-day prediction`))
-  prediction_error[["Neg."]] <- if (neg_err > 0) sqrt(neg_err / sum(pred_table_trunc$`Three-day actual usage` > pred_table_trunc$`Three-day prediction`))
+  prediction_error[["Pos."]] <- if (pos_err > 0) sqrt(pos_err / sum(pred_table_trunc$`Three-day actual usage` < pred_table_trunc$`Three-day prediction`)) else 0
+  prediction_error[["Neg."]] <- if (neg_err > 0) sqrt(neg_err / sum(pred_table_trunc$`Three-day actual usage` > pred_table_trunc$`Three-day prediction`)) else 0
   
   # RMSE by Day of Week
   for (dow in c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")) {
@@ -835,7 +835,7 @@ pred_table_analysis <- function(pred_table, config) {
   initial_mask <- seq_len(config$start + 5L)
   final_mask <- (nrow(pred_table) - 2L):nrow(pred_table)
   
-  list(pred_start = as.character(pred_table$date[length(initial_mask) + 1L]),
+  pred_stats <- list(pred_start = as.character(pred_table$date[length(initial_mask) + 1L]),
        pred_end = as.character(pred_table$date[final_mask[1L] - 1L]),
        num_days = final_mask[1L] - length(initial_mask) - 1L, # effective number of days
        total_model_waste = sum(pred_table$`Adj. waste`[-c(initial_mask, final_mask)]),
@@ -845,6 +845,13 @@ pred_table_analysis <- function(pred_table, config) {
        proj_loss = projection_loss(pred_table, config),
        real_loss = real_loss(pred_table, config),
        three_day_pred_rmse = prediction_error(pred_table, config))
+  
+  # Improve Readability of names
+  names(pred_stats) <- c("Prediction Started", "Prediction Ended", "Number of Days", "Total Model Waste",
+                         "Total Model Short", "Total Actual Waste", "Total Actual Short", "Loss from Table", "Real Loss",
+                         "Overall RMSE", "Positive RMSE", "Negative RMSE", 
+                         "Sun RMSE", "Mon RMSE", "Tue RMSE", "Wed RMSE", "Thu RMSE", "Fri RMSE", "Sat RMSE")
+  pred_stats
 }
 
 #' Combine projection loss and prediction error calculation into a single evaluation.

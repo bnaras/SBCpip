@@ -94,12 +94,11 @@ sbc_config <- SBC_config()
 #'   \item{\code{census_locations}}{a character vector locations that need to be used for modeling}
 #'   \item{\code{surgery_services}}{a character vector of OR services that need to be used for modeling}
 #'   \item{\code{c0}}{a value to use in training for c0}
-#'   \item{\code{min_inventory}}{a value to use as offset to ensure a minimum threshold}
 #'   \item{\code{history_window}}{how many days of history to use in training, default 200}
 #'   \item{\code{penalty_factor}}{the penalty factor in training, default 15}
 #'   \item{\code{start}}{the day when the model evaluation begins, default 10}
-#'   \item{\code{initial_expiry_data}}{the number of units expiring a day after prediction begins and one day after that, i.e. a 2-vector}
 #'   \item{\code{initial_collection_data}}{the number of units to collect on the prediction day, a day after, and another day after, i.e. a 3-vector}
+#'   \item{\code{initial_expiry_data}}{the number of units expiring a day after prediction begins and one day after that, i.e. a 2-vector}
 #'   \item{\code{data_folder}}{full path of location of raw data files}
 #'   \item{\code{log_folder}}{full path of where logs should go, must exist}
 #'   \item{\code{model_update_frequency}}{how often to update the model, default 7 days}
