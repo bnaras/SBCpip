@@ -12,6 +12,7 @@ library(duckdb)
 paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", package = "SBCpip"))
 data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
 
+### Initialization code
 
 ## Set config parameters for relevant column headers based on provided data mapping
 set_org_col_params <- function(file_type, data_mapping) {
@@ -31,6 +32,7 @@ cbc_thresholds <- read.csv(cbc_threshold_file)
 cbc_quantiles_tbl <- cbc_thresholds %>% dplyr::filter(metric == "quantile")
 cbc_abnormals_tbl <- cbc_thresholds %>% dplyr::filter(metric == "abnormal")
 
+## Helper to convert CBC quantiles from external table to the appropriate config functions
 cbc_quantile_to_function <- function(component, table) {
   ## Assume we have a row with columns metric = "quantile", base_name, type, and value
   table_row <- table %>% dplyr::filter(base_name == component)
@@ -52,7 +54,8 @@ cbc_quantile_to_function <- function(component, table) {
   eval(parse(text = sprintf("function(x) {  %s }", return_val)))
 }
   
-cbc_abormal_to_function <- function(component, table) {
+## Helper to convert CBC abnormalities from external table to the appropriate config functions
+cbc_abnormal_to_function <- function(component, table) {
   ## Assume we have a row with columns metric = "abnormal", base_name, type, and value
   table_row <- table %>% dplyr::filter(base_name == component)
   if (nrow(table_row) != 1L) {
@@ -70,6 +73,7 @@ cbc_abormal_to_function <- function(component, table) {
   eval(parse(text = sprintf("function(x) {  x %s %f}", direction, as.double(table_row$value))))
 }
 
+## Dashboard UI Code
 intro_line_1 <- 'An application implementing the method described by'
 intro_line_2 <- a(href = sprintf("https://doi.org/%s", paper_citation$doi),
                   sprintf("%s et. al., PNAS %s(%s) %s",
@@ -85,6 +89,7 @@ gg_color_hue <- function(n) {
 
 cols <- gg_color_hue(3L)
 
+## Dashboard Sidebar Items. These are inputs that control the display in body
 sidebar <- dashboardSidebar(
   sidebarMenu(
     id = "tabId"
@@ -167,6 +172,7 @@ sidebar <- dashboardSidebar(
   )
 )
 
+## Displays outputs of model validation and projections
 body <- dashboardBody(
   tags$head(
     tags$style(
@@ -325,19 +331,16 @@ logo_src <- system.file("webapps", "dashboard", "assets", "sbc.png", package = "
 dbHeader$children[[2]]$children <-  tags$a(href='https://stanfordbloodcenter.org',
                                            tags$img(src = 'https://sbcdonor.org/client_assets/images/logos/logo_stanford.png',
                                                     alt = 'Stanford Blood Center Dashboard', height = '40'))
-##dbHeader
-
-
 
 ui <- dashboardPage(
   title = "SBC Dashboard",
-  ##dashboardHeader(title = "Stanford Blood Center")
   header = dbHeader
   , sidebar = sidebar
   , body = body
   , skin = "green"
 )
 
+## Helper function to gather and summarize data from each table of the database
 fetch_data_for_dates <- function(req_start_date, req_end_date, table_name, db_path) {
   # Connect to duckdb database hosted on a local file
   if (req_end_date < req_start_date) return("End date must be at or after start date.")
@@ -378,10 +381,10 @@ fetch_data_for_dates <- function(req_start_date, req_end_date, table_name, db_pa
   tbl
 }
 
-# Helper function for feature input parsing (probably will remove)
 
 server <- function(input, output, session) {
   
+  ## Will remove once the multiInput is implemented
   parse_vars <- function(v) unlist(lapply(strsplit(as.character(v), split = ","), trimws))
   
   all_active_features <- reactive({
@@ -473,7 +476,7 @@ server <- function(input, output, session) {
     cbc_feature_vector <- parse_vars(input$cbc_features)
     cbc_q <- lapply(cbc_feature_vector, cbc_quantile_to_function, cbc_quantiles_tbl)
     names(cbc_q) <- cbc_feature_vector
-    cbc_a <- lapply(cbc_feature_vector, cbc_abormal_to_function, cbc_abnormals_tbl)
+    cbc_a <- lapply(cbc_feature_vector, cbc_abnormal_to_function, cbc_abnormals_tbl)
     names(cbc_a) <- cbc_feature_vector
     cbc_q_clean <- cbc_q[!is.na(cbc_q)]
     cbc_a_clean <- cbc_a[!is.na(cbc_a)]
@@ -680,17 +683,24 @@ server <- function(input, output, session) {
       dplyr::mutate(abs_coef = abs(value)) %>%
       dplyr::arrange(desc(abs_coef)) %>%
       dplyr::select(-c(date, abs_coef))  
+    
+    # We find the average platelet usage over the last [start] days in order to
+    # correct for expected waste.
+    transfusion_tbl <- db %>% 
+      dplyr::tbl("transfusion") %>%
+      dplyr::collect() %>%
+      dplyr::filter(date > input$predictDate - config$start & date <= input$predictDate)
+    mean_y_recent <- as.integer(mean(as.numeric(transfusion_tbl$used)))
+    
     DBI::dbDisconnect(db, shutdown = TRUE)
     
     # Return the predicted usage and recommended number of units to collect in 3 days.
-    list(output_txt = sprintf("Prediction Date: %s\nPredicted Usage for Next 3 Days: %d Units\n
-                              Recommended Amount to Collect in 3 Days: %d Units\n
-                              Model retraining in: %d Days",
+    list(output_txt = sprintf("Prediction Date: %s\nPredicted Usage for Next 3 Days: %d Units\n Recommended Amount to Collect in 3 Days: %d Units\n Model retraining in: %d Days",
                               input$predictDate,
                               pr$t_pred, 
-                              max(floor(pip::pos(pr$t_pred - input$collect1 - input$collect2 - input$expire1 - input$expire2 + 1)), config$c0),
+                              max(floor(pip::pos(pr$t_pred - input$collect1 - input$collect2 - min(input$expire1, mean_y_recent) - input$expire2 + 1)), config$c0),
                               config$model_update_frequency - model_age$age),
-         coef_tbl = coefs)
+         coef_tbl = head(coefs, 25L))
   })
   output$predictionResult <- renderText({
     predictSingleDay()$output_txt
@@ -771,9 +781,14 @@ server <- function(input, output, session) {
         db %>% DBI::dbDisconnect(shutdown = TRUE)
     
         # Output both the prediction and coefficient analyses
+        pred_analysis_items <- c("Prediction Started", "Prediction Ended", "Number of Days", "Total Model Waste",
+                                 "Total Model Short", "Total Actual Waste", "Total Actual Short", "Loss from Table", "Real Loss",
+                                 "Overall RMSE", "Positive RMSE", "Negative RMSE", 
+                                 "Sun RMSE", "Mon RMSE", "Tue RMSE", "Wed RMSE", "Thu RMSE", "Fri RMSE", "Sat RMSE")
         output$predAnalysis <- renderTable({
           unlist(pred_analysis) %>% 
-            as.data.frame()}, rownames = TRUE)
+            as.data.frame() %>%
+            `rownames<-`(pred_analysis_items)}, rownames = TRUE)
         
         output$coefAnalysis<- renderTable({
           coef_analysis %>%
@@ -874,7 +889,6 @@ server <- function(input, output, session) {
   output$cfPlot <- renderPlot({
     coefPlot()
   })
-  
   
 }
 
