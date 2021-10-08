@@ -25,7 +25,7 @@ devtools::install_github("bnaras/SBCpip")
 
 * `R/sbc_globals.R`: Defines the global config object, which contains default values for various model parameters. Includes functions to get and set config values.
 * `R/prediction_wrapper.R`: Contains higher level functions that loop over the main functions described in `R/process_data.R` to process data files and generate predictions for a range of dates. Also includes functions that summarize predictions and model coefficients in a tabular format in order to analyze model performance.
-* `R/process_data.R`: Contains lower-level functions to preprocess input to the model and generate predictions. In particular, `SBCpip::process_data_for_date_db` reads in the appropriate data files for each date and inserts/updates relevant data to a local DuckDB database. `SBCpip::predict_for_date_db` reads preprocessed data for a range of dates from the database and generates a usage prediction for the next three days.
+* `R/process_data.R`: Contains lower-level functions to preprocess input to the model and generate predictions. In particular, `SBCpip::process_data_for_date_db` reads in the appropriate data files for each date and inserts/updates relevant data to a local DuckDB database. `SBCpip::predict_for_date_db` reads preprocessed data for a range of dates from the database and generates a usage prediction for the next three days. Critically, all calls to the `pip` package are made from the function defined in this file.
 * `R/webapps.R`: Defines the function `SBCpip::sbc_dashboard()` which initializes the SBCpip Shiny Dashboard. The full dashboard code is contained in `inst/webapps/dashboard/app.R`.
 * `R/utilities.R`: Defines common helper functions for the above files.
 * `inst/extdata/sbc_data_mapping.csv`: Contains a table which the user must complete to map organization-specific data fields to those utilized by the Stanford Blood Center.
@@ -39,8 +39,8 @@ sbc_dashboard()
 ```
 
 In either case, the overall predictive workflow for `SBCpip` is as follows:
-1. **Gather Data:** Collect appropriate organization-specific data files for all dates of interest in a single directory and complete the provided data-mapping template `data_mapping.csv` (see **Data Preparation** section below).
-2. **Build Database:** Set appropriate database configurations and build a DuckDB database with observed variables and responses (platelet usage). This is accomplished using `SBCpip::sbc_build_and_save_full_db()`. This will convert data files to an easily ingestible format and restrict model input to variables of interest (see **Database Structure** section for more details). Configurations can be set either through the Shiny interface or by adjusting the config object. For parameters such as directory paths that are likely to remain fixed, we recommend updating `sbc_globals.R` directly to avoid updating this information each time (see **Model Configuration** section for more details).
+1. **Gather Data:** Collect appropriate organization-specific data files for all dates of interest in a single directory and complete the provided data-mapping template `sbc_data_mapping.csv` and CBC parsing template `cbc_thresholds.csv` (see **Data Preparation** section below).
+2. **Build Database:** Set appropriate database configurations and build a DuckDB database with observed variables and responses (platelet usage). This is accomplished using `SBCpip::sbc_build_and_save_full_db()`. This will convert data files to an easily ingestible format and restrict model input to variables of interest (see **Database Structure** section for more details). Configurations can be set either through the Shiny interface or by adjusting the config object. For parameters such as directory paths that are likely to remain fixed, we recommend updating `sbc_globals.R` directly to avoid updating this information each time (see **Model Behavior and Configuration** section for more details).
 3. **Adjust Model Settings:** Set model configurations such as training window size, model update frequency, and possible hyperparameters. These configurations can also be set either through the Shiny interface or by adjusting the config object (see **Model Configuration** section).
 4. **Validate Model:** Validate the model on previous blood product usage. This will allow the user to evaluate the model's performance on recent data and make any necessary adjustments to model configurations before making projections based on new data. This is accomplished using `SBCpip::sbc_predict_for_range_db`. After predictions have been generated, the user can build a table of inventory levels, waste, and shortage over the validation period using `SBCpip::build_prediction_table()` and obtain summary statistics using `SBCpip::pred_table_analysis()`. Similarly, the user can also build a table of the most prominent features used by the model in making predictions over the validation period using `SBCpip::build_coefficient_table()` and obtain a summary using `SBCpip::coef_table_analysis()`. All of these functions are performed automatically for the user via the Shiny dashboard interface.
 5. **Predict for New Data:** Based on observed input data and platelet usage during the specified training window, the model outputs predicted platelet usage for the next [three] days. It then uses current inventory levels to recommend the appropriate number of fresh platelets to collect in [three] days time.
@@ -53,12 +53,11 @@ On a given day *i*, the model serves to predict blood platelet usage over the fo
 Predictions are made based on the following features:
 1. A moving average of recent platelet usage
 2. A binary indicator for each day of the week
-3. Hospital features such as Complete Blood Counts (CBC) for patients, number of patients in specific locations of the hospital, and scheduled surgeries (see **`sbc_config`** and **Data Preparation** sections below).
+3. Hospital features such as Complete Blood Count (CBC) results for patients, number of patients in specific locations of the hospital, and scheduled surgeries (see **`sbc_config`** and **Data Preparation** sections below).
 
-The model is trained using a linear program API (`lpSolve`). The model is a straightforward linear model, but the linear program enforces a number of additional constraints on the resulting coefficients when the model is fit. For example, coefficients must be set such that both waste and shortage generated by the model during the training period are minimized, and the model does not directly penalize for less accurate predictions. This allows the user to specify statistical bias up or down based on the costliness of wasted units vs. product shortages.
+The model is trained using a linear program API (`lpSolve`). Decision variables include predictions, collections, inventory levels, waste, and shortage, in addition to coefficients. The model is a straightforward linear model, but the linear program enforces a number of additional constraints on the resulting coefficients when the model is fit. For example, coefficients must be set such that both waste and shortage generated by the model during the training period are minimized, and the model does not directly penalize for less accurate predictions. This allows the user to specify statistical bias up or down based on the costliness of wasted units vs. product shortages.
 
 The model also constrains the coefficients for hospital features (3) as a form of L1-regularization (LASSO). This constraint (*L*) is a hyperparameter that is tuned via (*n*/14)-fold cross-validation (CV), where *n* is the number of training samples. Due to the temporal arrangement of the data, each evaluation fold is not eliminated from the training set entirely, but rather the optimization problem sets all of the collection amounts during the span of the left-out fold equal to the exact number of platelets used (most efficient case) and ignores any waste and shortage generated during the span of the fold.
-
 
 
 ### `sbc_config` 
@@ -77,8 +76,8 @@ The configuration object, which is assigned to the environment, contains all of 
 
 #### Model Inputs and Localization
 (For more specific details on input data files and required fields, see the *Data Preparation* section below)
-* `cbc_quantiles`: A named list of site-specific quantile functions for each CBC of interest
-* `cbc_abnormals`: A named list of site-specific functions that flag values as abnormal or not
+* `cbc_quantiles`: A named list of site-specific quantile functions for each CBC of interest (see **Data Preparation** section below)
+* `cbc_abnormals`: A named list of site-specific functions that flag values as abnormal or not (see **Data Preparation** section below)
 * `census_locations`: A character vector of locations of interest in the hospital
 * `surgery_services`: A character vector of types of surgeries / OR services performed at the hospital, in particular those that typically require platelet transfusions
 * `org_cbc_cols`: The columns in the target organization's CBC files that correspond to required fields.
@@ -100,6 +99,8 @@ The configuration object, which is assigned to the environment, contains all of 
 * `lag_bounds`: While we assume previous blood product usage level is a key predictor of future usage, this allows the model to restrict the amount of weight given to this variable in favor of others (e.g. when there are abrupt changes in usage that may be caused by or at least correlate with hospital data).
 
 ## Data Preparation
+
+### Data Mapping and Compatibility
 `SBCpip` relies on 5 different file types. Each of the below file types must be added to the same data folder for each observed date:
 1. **CBC:** Results of CBC (Complete Blood Count) tests on hospital patients on a given date. The goal is to identify abnormal levels in hospital patients and use these instances as inputs to the model (1 row = 1 unique measurement)
 2. **Census:** Locations of patients in the hospital system (e.g. rooms, wards) on a given date. The goal is to identify specific locations that are increasing hospital demand for specific blood products. (1 row = 1 unique patient)
@@ -140,9 +141,40 @@ should include a table of mappings from their corresponding column headers to th
 	* Exp. Date: Specific date on which unit is set to expire [Datetime("%m/%d/%Y  %I:%M:%S %p")]
 	* Exp. Time: Specific time at which unit is set to expire [Double]
 
+### Additional CBC Data Preparation
+The CBC inputs are first summarized in terms of quantiles of the specific CBC result for each patient with respect to all patients, as well as an indicator of the number of patients with abnormal levels of certain components. Quantile functions and abnormal levels must be defined for the specific CBC components that the user would like to include as inputs to the model, and this is handled using the provided template file `inst/extdata/cbc_thresholds.csv`.
+
+For each component of interest, the user must specify the following fields in the file (for both quantiles and abnormals):
+#### Quantiles
+* `metric` = "quantile"
+* `base_name` = CBC component, e.g. "PLT"
+* `type` = "literal" (quantile is a fixed value) or "quantile" (quantile is computed based with respect to given data)
+* `value` = either the literal value for "literal" or which p-quantile is computed for "quantile" (0 < p < 1).
+
+### Abnormals
+* `metric` = "abnormal"
+* `base_name` = CBC component, e.g. "PLT"
+* `type` = "less" or "greater" depending on the direction of abnormality
+* `value` = the threshold value below ("less") or above ("greater") which we consider the level "abnormal"
+
+Note that CBC components for which a quantile and abnormal designation is not provided will be ignored as inputs to the model (a warning will be issued).
 
 
 ## Database Structure
+The local DuckDB database created by the SBCpip code at the path specified by the user will contain the following tables:
+
+* cbc
+* census
+* surgery
+* transfusion
+* inventory 
+
+Note that in order to ensure consistency between the data in each of these tables, only rows for which all 5 file types exist in the folder for a given date will be added to any table. The function `SBCpip::process_data_for_date` serves as a gatekeeper in this respect.
+
+When each prediction is made, we join rows from the 5 tables above and create rows in 2 additional tables: 
+* `model` - coefficients for each predicted day, the model’s age on that day, and the hyperparameter values selected during cross-validation
+* `pred_cache` - predictioned usage for each day
+An additional `data_scaling` table is used to store the current data scales (variance) and centers (mean) to standardize the data before it is input to the model.
 
 
 
