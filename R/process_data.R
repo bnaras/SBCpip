@@ -558,6 +558,7 @@ summarize_and_clean_surgery_next_three_day <- function(raw_data, services) {
                       sched_date = as.Date(.data$FIRST_SCHED_DATE),
                       case_class = .data$CASE_CLASS,
                       or_service = factor(x = .data$OR_SERVICE, levels = services)) %>%
+        dplyr::filter(!is.na(or_service)) %>%
         dplyr::select(.data$surgery_date, 
                       .data$sched_date, 
                       .data$case_class, 
@@ -574,7 +575,6 @@ summarize_and_clean_surgery_next_three_day <- function(raw_data, services) {
                            values_from = .data$n, 
                            values_fill = 0) %>%
         dplyr::mutate(date = curr_date) %>%
-        dplyr::rename(other = `NA`) %>%
         dplyr::relocate(date) -> 
         proc_data -> result$data -> result$summary
 
@@ -1002,8 +1002,7 @@ save_report_file <- function(report_tbl, report_folder, filename) {
 #'     list consisting of summary tibble, census_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime
 #'     read_tsv
-#' @import rlang enquo
-#' @import dplyr select_
+#' @importFrom dplyr select
 #' @importFrom readxl read_excel
 #' @importFrom lubridate ymd_hms ddays
 #' @importFrom stringr str_match
@@ -1011,6 +1010,7 @@ save_report_file <- function(report_tbl, report_folder, filename) {
 read_one_inventory_file <- function(filename,
                                     org_cols = c("Inv. ID", "Type", "Days to Expire", "Exp. Date", "Exp. Time"),
                                     date = NULL) {
+    
     if (is.null(date)) {
         date_string <- paste(
             substring(stringr::str_match(string = basename(filename),
@@ -1027,19 +1027,22 @@ read_one_inventory_file <- function(filename,
     
     # Filter the raw data to the columns of interest
     raw_data <- readxl::read_excel(path = filename)
+    
+    ## Stop if no data
+    if (nrow(raw_data) < 1) {
+        loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
+        stop(sprintf("No data in file %s", filename))
+    }
+    
     key_data <- raw_data %>%
         dplyr::select(c(as.name(org_cols[1]), 
                         as.name(org_cols[2]), 
                         as.name(org_cols[3]), 
                         as.name(org_cols[4]),
                         as.name(org_cols[5])))
+    
     names(key_data) <- sbc_cols
 
-    ## Stop if no data
-    if (nrow(raw_data) < 1) {
-        loggit::loggit(log_lvl = "ERROR", log_msg = sprintf("No data in file %s", filename))
-        stop(sprintf("No data in file %s", filename))
-    }
     processed_data <- summarize_and_clean_inventory(key_data, date)
     if (processed_data$errorCode != 0) {
         loggit::loggit(log_lvl = "ERROR", log_msg = processed_data$errorMessage)
@@ -1416,10 +1419,8 @@ predict_for_date_db <- function(conn, config,
     
     # Step 3. Define all variables based on current config (this allows mismatch between database columns and config)
     cbc_names <- unname(sapply(config$cbc_vars, function(x) paste0(x, "_Nq")))
-    all_vars <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag",
-                  cbc_names, 
-                  config$census_locations, 
-                  config$surgery_services)
+    all_hosp_vars <- c(cbc_names, config$census_locations, config$surgery_services)
+    all_vars <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag", all_hosp_vars)
     all_cols <- c("date", all_vars, "plt_used")
     
     # Step 4. Load required data from database and "upsert" the new rows for each table
@@ -1437,6 +1438,16 @@ predict_for_date_db <- function(conn, config,
         db_table <- conn %>% 
             dplyr::tbl(table_name) %>% 
             dplyr::collect()
+        
+        new_vars <- names(result[[table_name]])
+        db_vars <- names(db_table)
+        missing_vars <- new_vars[!(new_vars %in% db_vars)]
+        missing_string <- paste(missing_vars, collapse = ", ")
+        
+        if (length(missing_vars) > 0L) {
+            stop(sprintf("Database is missing some of the requested features: %s . Please rebuild the database using these features.", 
+                         missing_string))
+        }
         
         # Note that the upsert function is experimental. May need to replace with manual workaround
         # Note that all columns in db_table must exist in result (or vice versa) - throws vague error

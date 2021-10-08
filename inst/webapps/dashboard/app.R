@@ -10,28 +10,65 @@ library(DBI)
 library(duckdb)
 
 paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", package = "SBCpip"))
-#db_path <- "/Users/kaiokada/Desktop/Research/pip.duckdb"
 data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
 
-# Read the column mapping from the sbc_data_mapping file.
+
+## Set config parameters for relevant column headers based on provided data mapping
+set_org_col_params <- function(file_type, data_mapping) {
+  invisible(set_config_param(sprintf("org_%s_cols", file_type),
+                             (data_mapping %>%
+                                dplyr::filter(data_file == file_type))$org_data_column_name_to_edit))
+}
+
+## Read column mappings from the sbc_data_mapping file.
 data_mapping_file <- system.file("extdata", "sbc_data_mapping.csv", package = "SBCpip")
 data_mapping <- read.csv(data_mapping_file)
+sapply(data_tables, set_org_col_params, data_mapping)
 
-set_config_param("org_cbc_cols", 
-                 (data_mapping %>% 
-                   dplyr::filter(data_file == "CBC"))$org_data_column_name_to_edit)
-set_config_param("org_census_cols", 
-                 (data_mapping %>% 
-                    dplyr::filter(data_file == "Census"))$org_data_column_name_to_edit)
-set_config_param("org_surgery_cols",
-                 (data_mapping %>% 
-                    dplyr::filter(data_file == "Surgery"))$org_data_column_name_to_edit)
-set_config_param("org_transfusion_cols", 
-                 (data_mapping %>% 
-                    dplyr::filter(data_file == "Transfusion"))$org_data_column_name_to_edit)
-set_config_param("org_inventory_cols",
-                 (data_mapping %>%
-                    dplyr::filter(data_file == "Inventory"))$org_data_column_name_to_edit)
+## Set config params for cbc quantiles and abnormals
+cbc_threshold_file <- system.file("extdata", "cbc_thresholds.csv", package = "SBCpip")
+cbc_thresholds <- read.csv(cbc_threshold_file)
+cbc_quantiles_tbl <- cbc_thresholds %>% dplyr::filter(metric == "quantile")
+cbc_abnormals_tbl <- cbc_thresholds %>% dplyr::filter(metric == "abnormal")
+
+cbc_quantile_to_function <- function(component, table) {
+  ## Assume we have a row with columns metric = "quantile", base_name, type, and value
+  table_row <- table %>% dplyr::filter(base_name == component)
+  if (nrow(table_row) != 1L) {
+    warning(sprintf("Either the base_name %s is not included in cbc_thresholds.csv, or multiple rows were found. Ignoring this feature.",
+                 component))
+    return(NA)
+  }
+  
+  return_val <- NA
+  if (table_row$type == "literal")
+    return_val <- as.character(table_row$value)
+  else if (table_row$type == "quantile")
+    return_val <- sprintf("quantile(x, probs = %f, na.rm = TRUE)", 
+                          as.double(table_row$value))
+  else stop("Quantile type must be 'quantile' or 'literal'. Please check cbc_thresholds.csv.")
+  
+  # evaluate the function 
+  eval(parse(text = sprintf("function(x) {  %s }", return_val)))
+}
+  
+cbc_abormal_to_function <- function(component, table) {
+  ## Assume we have a row with columns metric = "abnormal", base_name, type, and value
+  table_row <- table %>% dplyr::filter(base_name == component)
+  if (nrow(table_row) != 1L) {
+    warning(sprintf("Either the base_name %s is not included in cbc_thresholds.csv, or multiple rows were found. Ignoring this feature.",
+                    component))
+    return(NA)
+  }
+  
+  direction <- NA
+  if (table_row$type == "greater") direction <- ">"
+  else if (table_row$type == "less") direction <- "<"
+  else stop("Abnormality type must be 'greater' or 'less'. Please check cbc_thresholds.csv.")
+  
+  # return the evaluated function 
+  eval(parse(text = sprintf("function(x) {  x %s %f}", direction, as.double(table_row$value))))
+}
 
 intro_line_1 <- 'An application implementing the method described by'
 intro_line_2 <- a(href = sprintf("https://doi.org/%s", paper_citation$doi),
@@ -331,8 +368,6 @@ fetch_data_for_dates <- function(req_start_date, req_end_date, table_name, db_pa
     return("Some or all data files are unavailable for the requested date.")
   }
   
-  print(full_tbl)
-  
   tbl <- full_tbl %>% dplyr::ungroup() %>%
     dplyr::filter(date %in% all_dates) %>%
     tidyr::pivot_longer(-c(date), names_to = "var", values_to = "count") %>%
@@ -374,8 +409,11 @@ server <- function(input, output, session) {
     set_config_param("surgery_filename_prefix", input$surgery_filename_prefix)
     set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
     set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
+    set_config_param("log_filename_prefix", input$log_filename_prefix)
     
     config <- SBCpip::get_SBC_config()
+    
+    loggit::set_logfile(paste0(input$log_folder, sprintf(input$log_filename_prefix, Sys.Date())))
     
     # Grab CBC Features
     cbcFilename <- tail(list.files(path = config$data_folder, 
@@ -432,10 +470,25 @@ server <- function(input, output, session) {
     set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
     
     # Variables (eventually would like some kind of picklist setup instead of free text)
-    set_config_param("cbc_vars", parse_vars(input$cbc_features))
+    cbc_feature_vector <- parse_vars(input$cbc_features)
+    cbc_q <- lapply(cbc_feature_vector, cbc_quantile_to_function, cbc_quantiles_tbl)
+    names(cbc_q) <- cbc_feature_vector
+    cbc_a <- lapply(cbc_feature_vector, cbc_abormal_to_function, cbc_abnormals_tbl)
+    names(cbc_a) <- cbc_feature_vector
+    cbc_q_clean <- cbc_q[!is.na(cbc_q)]
+    cbc_a_clean <- cbc_a[!is.na(cbc_a)]
+    cbc_feats_with_levels <- intersect(names(cbc_q_clean), names(cbc_a_clean))
+    
+    # Only include the given cbc variables for which we have a quantile and an abnormality level
+    set_config_param("cbc_vars", cbc_feature_vector[cbc_feature_vector %in% cbc_feats_with_levels])
+    set_config_param("cbc_quantiles", cbc_q_clean)
+    set_config_param("cbc_abnormals", cbc_a_clean)
+    
     set_config_param("census_locations", parse_vars(input$census_features))
     set_config_param("surgery_services", parse_vars(input$surgery_features))
     set_config_param("database_path", input$database_path)
+    
+    loggit::set_logfile(paste0(input$log_folder, sprintf(input$log_filename_prefix, Sys.Date())))
     
     # Update the coefficients 
     updateMultiInput(session, 
@@ -630,7 +683,9 @@ server <- function(input, output, session) {
     DBI::dbDisconnect(db, shutdown = TRUE)
     
     # Return the predicted usage and recommended number of units to collect in 3 days.
-    list(output_txt = sprintf("Prediction Date: %s\nPredicted Usage for Next 3 Days: %d Units\nRecommended Amount to Collect in 3 Days: %d Units\nModel retraining in: %d Days",
+    list(output_txt = sprintf("Prediction Date: %s\nPredicted Usage for Next 3 Days: %d Units\n
+                              Recommended Amount to Collect in 3 Days: %d Units\n
+                              Model retraining in: %d Days",
                               input$predictDate,
                               pr$t_pred, 
                               max(floor(pip::pos(pr$t_pred - input$collect1 - input$collect2 - input$expire1 - input$expire2 + 1)), config$c0),
@@ -653,69 +708,80 @@ server <- function(input, output, session) {
   })
   
   # Generate prediction table for a range of dates.
-  generatePredTable <- eventReactive(input$predictionSummaryButton, {   
-    opts <- options(warn = 1) ## Report warnings as they appear
-    req(input$startDate)
-    req(input$endDate)
+  observe({
+    btns <- c("predictionSummaryButton", "standaloneSummaryButton")
+    lapply(btns, function(x) {   
+      observeEvent(input[[x]], {
+        opts <- options(warn = 1) ## Report warnings as they appear
+        req(input$startDate)
+        req(input$endDate)
+        
+        start_date <- as.Date(startDate())
+        end_date <- as.Date(endDate())
+        num_days <- as.integer(end_date - start_date + 1)
+        
+        config <- SBCpip::get_SBC_config()
+        
+        # Eventually will want to add future_promise here for scalability. Not including this
+        # for now as the resulting functionality is the same with a single session.
+        db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
+        on.exit({
+          if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
+        }, add = TRUE)
+        
+        if (sum(data_tables %in% DBI::dbListTables(db)) != length(data_tables)) {
+          return("Data tables are not available in database. 
+                   Make sure to run 'Database Settings' >> 'Reset Database' first.")
+        }
     
-    start_date <- as.Date(startDate())
-    end_date <- as.Date(endDate())
-    num_days <- as.integer(end_date - start_date + 1)
+        prediction_df <- NULL
     
-    config <- SBCpip::get_SBC_config()
+        ## Only run model validation if the correct button is pressed
+        if (input$predictionSummaryButton) {
+          # Initialize shiny progress bar
+          progress <- shiny::Progress$new()
+          progress$set(message = "Model Validation Progress", value = 0)
+          on.exit(progress$close())
     
-    # Initialize shiny progress bar
-    progress <- shiny::Progress$new()
-    progress$set(message = "Model Validation Progress", value = 0)
-    on.exit(progress$close())
-    
-    # Callback function to update progress
-    updateProgress <- function(detail = NULL) {
-      progress$inc(amount = 1/num_days, detail = detail)
-    }
-    
-    # Eventually will want to add future_promise here for scalability. Not including this
-    # for now as the resulting functionality is the same with a single session.
-    db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
-    on.exit({
-      if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
-    }, add = TRUE)
+          # Callback function to update progress
+          updateProgress <- function(detail = NULL) {
+            progress$inc(amount = 1/num_days, detail = detail)
+          }
 
-    if (sum(data_tables %in% DBI::dbListTables(db)) != length(data_tables)) {
-      return("Data tables are not available in database. Make sure to run 'Database Settings' >> 'Reset Database' first.")
-    }
-
-    transfusion_tbl <- db %>% dplyr::tbl("transfusion") %>% dplyr::collect()
+          # Check to make sure all transfusion data is included in the range we are trying to predict
+          # There's no particular reason tranfusion is used here as opposed to any other table
+          transfusion_tbl <- db %>% dplyr::tbl("transfusion") %>% dplyr::collect()
     
-    all_dates <- seq.Date(start_date, end_date, by = 1L)
-    missing_dates <- all_dates[!(all_dates %in% transfusion_tbl$date)]
+          all_dates <- seq.Date(start_date, end_date, by = 1L)
+          missing_dates <- all_dates[!(all_dates %in% transfusion_tbl$date)]
 
-    # Check to make sure all transfusion data is included in the range we are trying to predict
-    if (length(missing_dates) > 0L) return("Data for some or all of the selected dates are missing in the database.")
+          if (length(missing_dates) > 0L) return("Data for some or all of the selected dates are missing in the database.")
     
-    # Predict range that needs to be predicted
-    prediction_df <- db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config, updateProgress = updateProgress)
-    pred_analysis <- db %>% SBCpip::build_prediction_table_db(config, start_date, end_date, 
-                                                              prediction_df) %>% 
-      SBCpip::pred_table_analysis(config)
-    coef_analysis <- db %>% SBCpip::build_coefficient_table_db(start_date, num_days) %>%
-      SBCpip::coef_table_analysis()
+          # Predict range that needs to be predicted
+          prediction_df <- db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config, 
+                                                                   updateProgress = updateProgress)
+        }
+    
+        pred_analysis <- db %>% SBCpip::build_prediction_table_db(config, start_date, end_date, prediction_df) %>% 
+          SBCpip::pred_table_analysis(config)
+        
+        coef_analysis <- db %>% SBCpip::build_coefficient_table_db(start_date, num_days) %>%
+          SBCpip::coef_table_analysis()
       
-    db %>% DBI::dbDisconnect(shutdown = TRUE)
+        db %>% DBI::dbDisconnect(shutdown = TRUE)
     
-    # Output both the prediction and coefficient analyses
-    list(pred_analysis = unlist(pred_analysis), coef_analysis = coef_analysis)
-  })
-  output$predAnalysis <- renderTable({
-    generatePredTable() %>% 
-      `$`(pred_analysis) %>%
-      as.data.frame()
-    }, rownames = TRUE)
-  output$coefAnalysis<- renderTable({
-    generatePredTable() %>%
-      `$`(coef_analysis) %>%
-      `$`(other) 
+        # Output both the prediction and coefficient analyses
+        output$predAnalysis <- renderTable({
+          unlist(pred_analysis) %>% 
+            as.data.frame()}, rownames = TRUE)
+        
+        output$coefAnalysis<- renderTable({
+          coef_analysis %>%
+            `$`(other) 
+        }, rownames = TRUE)
+      })
     })
+  })
 
   ## Plot a range of dates that have already been predicted (in the pred_cache)
   predPlot <- eventReactive(input$predPlotButton, {

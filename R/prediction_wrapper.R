@@ -847,10 +847,10 @@ pred_table_analysis <- function(pred_table, config) {
        three_day_pred_rmse = prediction_error(pred_table, config))
   
   # Improve Readability of names
-  names(pred_stats) <- c("Prediction Started", "Prediction Ended", "Number of Days", "Total Model Waste",
-                         "Total Model Short", "Total Actual Waste", "Total Actual Short", "Loss from Table", "Real Loss",
-                         "Overall RMSE", "Positive RMSE", "Negative RMSE", 
-                         "Sun RMSE", "Mon RMSE", "Tue RMSE", "Wed RMSE", "Thu RMSE", "Fri RMSE", "Sat RMSE")
+  #names(pred_stats) <- c("Prediction Started", "Prediction Ended", "Number of Days", "Total Model Waste",
+  #                       "Total Model Short", "Total Actual Waste", "Total Actual Short", "Loss from Table", "Real Loss",
+  #                       "Overall RMSE", "Positive RMSE", "Negative RMSE", 
+  #                       "Sun RMSE", "Mon RMSE", "Tue RMSE", "Wed RMSE", "Thu RMSE", "Fri RMSE", "Sat RMSE")
   pred_stats
 }
 
