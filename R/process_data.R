@@ -423,7 +423,7 @@ process_all_transfusion_files <- function(data_folder,
 }
 
 #' Read a single day surgery file data and return tibble and summary
-#' @param filenames the fully qualified path of the 3 files file
+#' @param filename the full name of the surgery data file
 #' @param services the list of surgery types considered as features
 #' @param org_cols list of target organization's column names (from data mapping)
 #' @return a list of four items, filename, raw_data (tibble), report a
@@ -478,6 +478,7 @@ read_one_surgery_file <- function(filename, services,
 #' Read a surgery file data  for following 3 days and return tibble and summary
 #' @param filenames the fully qualified path of the 3 files file
 #' @param services the list of surgery types considered as features
+#' @param org_cols the organization-specific column headers for key surgery fields in the data files
 #' @return a list of four items, filename, raw_data (tibble), report a
 #'     list consisting of summary tibble, surgery_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
@@ -558,7 +559,7 @@ summarize_and_clean_surgery_next_three_day <- function(raw_data, services) {
                       sched_date = as.Date(.data$FIRST_SCHED_DATE),
                       case_class = .data$CASE_CLASS,
                       or_service = factor(x = .data$OR_SERVICE, levels = services)) %>%
-        dplyr::filter(!is.na(or_service)) %>%
+        dplyr::filter(!is.na(.data$or_service)) %>%
         dplyr::select(.data$surgery_date, 
                       .data$sched_date, 
                       .data$case_class, 
@@ -622,7 +623,7 @@ summarize_and_clean_surgery_single_day <- function(raw_data, services) {
                            values_fill = 0) %>%
         dplyr::mutate(date = filtered_data$surgery_date[1]) %>%
         dplyr::relocate(date) %>%
-        dplyr::rename(other = `NA`) -> 
+        dplyr::rename(other = .data$`NA`) -> 
         proc_data -> result$data -> result$summary
     
     result
@@ -639,6 +640,7 @@ summarize_and_clean_surgery_single_day <- function(raw_data, services) {
 #' @importFrom tools file_path_sans_ext
 #' @importFrom tidyr replace_na
 #' @importFrom writexl write_xlsx
+#' @importFrom rlang .data
 #' @export
 process_all_surgery_files <- function(data_folder,
                                       services,
@@ -659,7 +661,8 @@ process_all_surgery_files <- function(data_folder,
     Reduce(f = rbind,
            lapply(raw_surgery, function(x) x$surgery_data)) %>%
         dplyr::distinct() %>%
-        dplyr::arrange(date) %>% replace(., is.na(.), 0)
+        dplyr::arrange(date) %>% 
+        replace(.data, is.na(.data), 0)
 }
 
 #' Construct a tibble containing the quartiles of the CBC values and lagged features
@@ -1099,6 +1102,7 @@ summarize_and_clean_inventory <- function(raw_data, date) {
 #'     data_folder with "_Reports" appended. Must exist.
 #' @param pattern the pattern to distinguish CBC files, default
 #'     "Daily_Product_Inventory_Report_Morning_To_Folder*" appearing anywhere
+#' @param org_cols a vector of organization-specific column headers for relevant inventory fields
 #' @return a combined dataset
 #' @importFrom tools file_path_sans_ext
 #' @importFrom tidyr replace_na
@@ -1108,10 +1112,11 @@ process_all_inventory_files <- function(data_folder,
                                         report_folder = file.path(dirname(data_folder),
                                                                   paste0(basename(data_folder),
                                                                          "_Reports")),
-                                        pattern = "Daily_Product_Inventory_Report_Morning_To_Folder*") {
+                                        pattern = "Daily_Product_Inventory_Report_Morning_To_Folder*", 
+                                        org_cols = c("Inv. ID", "Type", "Days to Expire", "Exp. Date", "Exp. Time")) {
     fileList <- list.files(data_folder, pattern = pattern , full.names = TRUE)
     names(fileList) <- basename(fileList)
-    raw_inventory <- lapply(fileList, read_one_inventory_file, config$org_inventory_cols)
+    raw_inventory <- lapply(fileList, read_one_inventory_file, org_cols)
 
     for (item in raw_inventory) {
         save_report_file(report_tbl = item$report,
@@ -1373,6 +1378,7 @@ predict_for_date <- function(config,
 #' one where the prediction is made on the morning of day \eqn{i + 1}
 #' for day \eqn{i}.
 #'
+#' @param conn the active database connection object
 #' @param config the site configuration
 #' @param date the date string for which the data is to be processed in "YYYY-mm-dd" format
 #' @param prev_day the previous date, default NA, which means it is computed from date
@@ -1380,6 +1386,7 @@ predict_for_date <- function(config,
 #' @importFrom pip build_model predict_three_day_sum evaluate_model
 #' @importFrom magrittr %>%
 #' @importFrom dplyr tbl collect rows_upsert filter select distinct copy_to mutate relocate
+#' @importFrom tidyselect all_of
 #' @importFrom DBI dbIsValid dbListTables
 #' @importFrom tibble tibble
 #' @return a prediction tibble named prediction_df with a column for date and the prediction
@@ -1559,7 +1566,7 @@ predict_for_date_db <- function(conn, config,
         # Convert model data.frame row into model "object" for prediction
         model$l1_bound <- model_row$l1_bound
         model$lag_bound <- model_row$lag_bound
-        model$coefs <- as.numeric(model_row %>% dplyr::select(-c(l1_bound, lag_bound, date, age)))
+        model$coefs <- as.numeric(model_row %>% dplyr::select(-c(.data$l1_bound, .data$lag_bound, date, .data$age)))
         names(model$coefs) <- setdiff(colnames(model_row), c("date", "l1_bound", "lag_bound", "age"))
         
         #Update the date and model age

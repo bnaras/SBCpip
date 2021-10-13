@@ -2,21 +2,21 @@
 % Please edit documentation in R/prediction_wrapper.R
 \name{build_coefficient_table_db}
 \alias{build_coefficient_table_db}
-\title{Database version of build_coefficient_table}
+\title{Build a table of coefficients over the prediction period based on the database model table}
 \usage{
 build_coefficient_table_db(conn, pred_start_date, num_days)
 }
 \arguments{
+\item{conn}{the active database connection object}
+
 \item{pred_start_date, }{the start date for the prediction, used to specify
 date range for the seed dataset.}
 
 \item{num_days, }{the number of days to predict from pred_start_date}
-
-\item{config}{the site-specific configuration}
 }
 \value{
 a data frame containing the coefficients generated during the prediction
 }
 \description{
-Database version of build_coefficient_table
+Build a table of coefficients over the prediction period based on the database model table
 }

@@ -45,6 +45,8 @@ In either case, the overall predictive workflow for `SBCpip` is as follows:
 4. **Validate Model:** Validate the model on previous blood product usage. This will allow the user to evaluate the model's performance on recent data and make any necessary adjustments to model configurations before making projections based on new data. This is accomplished using `SBCpip::sbc_predict_for_range_db`. After predictions have been generated, the user can build a table of inventory levels, waste, and shortage over the validation period using `SBCpip::build_prediction_table()` and obtain summary statistics using `SBCpip::pred_table_analysis()`. Similarly, the user can also build a table of the most prominent features used by the model in making predictions over the validation period using `SBCpip::build_coefficient_table()` and obtain a summary using `SBCpip::coef_table_analysis()`. All of these functions are performed automatically for the user via the Shiny dashboard interface.
 5. **Predict for New Data:** Based on observed input data and platelet usage during the specified training window, the model outputs predicted platelet usage for the next [three] days. It then uses current inventory levels to recommend the appropriate number of fresh platelets to collect in [three] days time.
 
+Please read the **Shiny Dashboard** section below for more details.
+
 ## Model Behavior and Configuration
 
 ### Model Description and Behavior
@@ -163,11 +165,11 @@ Note that CBC components for which a quantile and abnormal designation is not pr
 ## Database Structure
 The local DuckDB database created by the SBCpip code at the path specified by the user will contain the following tables:
 
-* cbc
-* census
-* surgery
-* transfusion
-* inventory 
+* `cbc`
+* `census`
+* `surgery`
+* `transfusion`
+* `inventory`
 
 Note that in order to ensure consistency between the data in each of these tables, only rows for which all 5 file types exist in the folder for a given date will be added to any table. The function `SBCpip::process_data_for_date` serves as a gatekeeper in this respect.
 
@@ -175,6 +177,9 @@ When each prediction is made, we join rows from the 5 tables above and create ro
 * `model` - coefficients for each predicted day, the model’s age on that day, and the hyperparameter values selected during cross-validation
 * `pred_cache` - predictioned usage for each day
 An additional `data_scaling` table is used to store the current data scales (variance) and centers (mean) to standardize the data before it is input to the model.
+
+## Shiny Dashboard
+
 
 
 

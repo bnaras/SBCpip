@@ -1,6 +1,5 @@
 library(shiny)
 library(shinydashboard)
-library(shinyWidgets)
 library(shinyalert)
 library(SBCpip)
 library(tidyverse)
@@ -16,9 +15,9 @@ data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
 
 ## Set config parameters for relevant column headers based on provided data mapping
 set_org_col_params <- function(file_type, data_mapping) {
-  invisible(set_config_param(sprintf("org_%s_cols", file_type),
-                             (data_mapping %>%
-                                dplyr::filter(data_file == file_type))$org_data_column_name_to_edit))
+  invisible(SBCpip::set_config_param(sprintf("org_%s_cols", file_type),
+                                     (data_mapping %>%
+                                        dplyr::filter(data_file == file_type))$org_data_column_name_to_edit))
 }
 
 ## Read column mappings from the sbc_data_mapping file.
@@ -185,7 +184,7 @@ body <- dashboardBody(
             }
            "
       ))),
-  useShinyalert(),
+  shinyalert::useShinyalert(),
   tabItems(
     tabItem(tabName = "dashboard"
             , h2("Platelet Inventory Prediction")
@@ -213,9 +212,20 @@ body <- dashboardBody(
                 , box(
                   h3("Feature Names")
                   , actionButton(inputId = "refreshFeatures", label = "Refresh Features")
-                  , textAreaInput(inputId = "cbc_features", label = "CBC Features List", value = paste0(SBCpip::get_SBC_config()$cbc_vars, collapse = ", "))
-                  , textAreaInput(inputId = "census_features", label = "Census Features List", value = paste0(SBCpip::get_SBC_config()$census_locations, collapse = ", "))
-                  , textAreaInput(inputId = "surgery_features", label = "Surgery Features List", value = paste0(SBCpip::get_SBC_config()$surgery_services, collapse = ", "))
+                  , shinyWidgets::multiInput(inputId = "cbc_features", 
+                                             label = "CBC Features List", 
+                                             choices = SBCpip::get_SBC_config()$cbc_vars, 
+                                             selected = SBCpip::get_SBC_config()$cbc_vars) #value = paste0(SBCpip::get_SBC_config()$cbc_vars, collapse = ", "))
+                  , shinyWidgets::multiInput(inputId = "census_features", 
+                                             label = "Census Features List", 
+                                             choices = SBCpip::get_SBC_config()$census_locations,
+                                             selected = SBCpip::get_SBC_config()$census_locations)
+                                             #value = paste0(SBCpip::get_SBC_config()$census_locations, collapse = ", "))
+                  , shinyWidgets::multiInput(inputId = "surgery_features", 
+                                             label = "Surgery Features List", 
+                                             choices = SBCpip::get_SBC_config()$surgery_services,
+                                             selected = SBCpip::get_SBC_config()$surgery_services)
+                                             #value = paste0(SBCpip::get_SBC_config()$surgery_services, collapse = ", "))
                 )
               )
     )
@@ -403,16 +413,16 @@ server <- function(input, output, session) {
   # Refresh possible features to choose from based on available data files
   observeEvent(input$refreshFeatures, {
     # Folder names
-    set_config_param("data_folder", input$data_folder)
-    set_config_param("log_folder", input$log_folder)
+    SBCpip::set_config_param("data_folder", input$data_folder)
+    SBCpip::set_config_param("log_folder", input$log_folder)
     
     # File prefixes
-    set_config_param("cbc_filename_prefix", input$cbc_filename_prefix)
-    set_config_param("census_filename_prefix", input$census_filename_prefix)
-    set_config_param("surgery_filename_prefix", input$surgery_filename_prefix)
-    set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
-    set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
-    set_config_param("log_filename_prefix", input$log_filename_prefix)
+    SBCpip::set_config_param("cbc_filename_prefix", input$cbc_filename_prefix)
+    SBCpip::set_config_param("census_filename_prefix", input$census_filename_prefix)
+    SBCpip::set_config_param("surgery_filename_prefix", input$surgery_filename_prefix)
+    SBCpip::set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
+    SBCpip::set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
+    SBCpip::set_config_param("log_filename_prefix", input$log_filename_prefix)
     
     config <- SBCpip::get_SBC_config()
     
@@ -429,7 +439,9 @@ server <- function(input, output, session) {
     
     cbcFeatures <- unique(cbcData[[config$org_cbc_cols[2]]])
     
-    updateTextInput(session, inputId = "cbc_features", value = paste0(sort(cbcFeatures), collapse = ", "))
+    shinyWidgets::updateMultiInput(session, inputId = "cbc_features", 
+                                   selected = sort(cbcFeatures),
+                                   choices = sort(cbcFeatures))
     
     # Grab Census Features
     censusFilename <- tail(list.files(path = config$data_folder, 
@@ -442,7 +454,9 @@ server <- function(input, output, session) {
     
     censusFeatures <- unique(censusData[[config$org_census_cols[2]]])
     
-    updateTextInput(session, inputId = "census_features", value = paste0(sort(censusFeatures), collapse = ", "))
+    shinyWidgets::updateMultiInput(session, inputId = "census_features", 
+                                  selected = sort(censusFeatures),
+                                  choices = sort(censusFeatures))#value = paste0(sort(censusFeatures), collapse = ", "))
     
     # Grab Surgery Features
     surgeryFilename <- tail(list.files(path = config$data_folder, 
@@ -455,25 +469,27 @@ server <- function(input, output, session) {
     
     surgeryFeatures <- unique(surgeryData[[config$org_surgery_cols[2]]])
     
-    updateTextInput(session, inputId = "surgery_features", value = paste0(sort(surgeryFeatures), collapse = ", "))
+    shinyWidgets::updateMultiInput(session, inputId = "surgery_features", 
+                                   selected = sort(surgeryFeatures),
+                                   choices = sort(surgeryFeatures))#value = paste0(sort(surgeryFeatures), collapse = ", "))
     
   })
   
   # Set the database build configurations
   observeEvent(input$setDBValues, {
     # Folder names
-    set_config_param("data_folder", input$data_folder)
-    set_config_param("log_folder", input$log_folder)
+    SBCpip::set_config_param("data_folder", input$data_folder)
+    SBCpip::set_config_param("log_folder", input$log_folder)
     
     # File prefixes
-    set_config_param("cbc_filename_prefix", input$cbc_filename_prefix)
-    set_config_param("census_filename_prefix", input$census_filename_prefix)
-    set_config_param("surgery_filename_prefix", input$surgery_filename_prefix)
-    set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
-    set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
+    SBCpip::set_config_param("cbc_filename_prefix", input$cbc_filename_prefix)
+    SBCpip::set_config_param("census_filename_prefix", input$census_filename_prefix)
+    SBCpip::set_config_param("surgery_filename_prefix", input$surgery_filename_prefix)
+    SBCpip::set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
+    SBCpip::set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
     
     # Variables (eventually would like some kind of picklist setup instead of free text)
-    cbc_feature_vector <- parse_vars(input$cbc_features)
+    cbc_feature_vector <- input$cbc_features
     cbc_q <- lapply(cbc_feature_vector, cbc_quantile_to_function, cbc_quantiles_tbl)
     names(cbc_q) <- cbc_feature_vector
     cbc_a <- lapply(cbc_feature_vector, cbc_abnormal_to_function, cbc_abnormals_tbl)
@@ -483,45 +499,45 @@ server <- function(input, output, session) {
     cbc_feats_with_levels <- intersect(names(cbc_q_clean), names(cbc_a_clean))
     
     # Only include the given cbc variables for which we have a quantile and an abnormality level
-    set_config_param("cbc_vars", cbc_feature_vector[cbc_feature_vector %in% cbc_feats_with_levels])
-    set_config_param("cbc_quantiles", cbc_q_clean)
-    set_config_param("cbc_abnormals", cbc_a_clean)
+    SBCpip::set_config_param("cbc_vars", cbc_feature_vector[cbc_feature_vector %in% cbc_feats_with_levels])
+    SBCpip::set_config_param("cbc_quantiles", cbc_q_clean)
+    SBCpip::set_config_param("cbc_abnormals", cbc_a_clean)
     
-    set_config_param("census_locations", parse_vars(input$census_features))
-    set_config_param("surgery_services", parse_vars(input$surgery_features))
-    set_config_param("database_path", input$database_path)
+    SBCpip::set_config_param("census_locations", input$census_features)
+    SBCpip::set_config_param("surgery_services", input$surgery_features)
+    SBCpip::set_config_param("database_path", input$database_path)
     
     loggit::set_logfile(paste0(input$log_folder, sprintf(input$log_filename_prefix, Sys.Date())))
     
     # Update the coefficients 
-    updateMultiInput(session, 
-                     inputId = "coefList", 
-                     choices = all_active_features())
+    shinyWidgets::updateMultiInput(session, 
+                                   inputId = "coefList", 
+                                   choices = all_active_features())
     
-    shinyalert("Success", "The database settings have been saved successfully.")
+    shinyalert::shinyalert("Success", "The database settings have been saved successfully.")
   })
   
   # Save parameters from settings panel to config.
   observeEvent(input$setModelValues, {
 
     # Inventory parameters
-    set_config_param("c0", input$c0) # for training and cross-validation
-    set_config_param("lo_inv_limit", input$loss_inventory_range[1]) # for loss function
-    set_config_param("hi_inv_limit", input$loss_inventory_range[2]) # for loss function
-    set_config_param("min_inventory", 0) # for prediction table building
-    set_config_param("penalty_factor", input$penalty_factor)
+    SBCpip::set_config_param("c0", input$c0) # for training and cross-validation
+    SBCpip::set_config_param("lo_inv_limit", input$loss_inventory_range[1]) # for loss function
+    SBCpip::set_config_param("hi_inv_limit", input$loss_inventory_range[2]) # for loss function
+    SBCpip::set_config_param("min_inventory", 0) # for prediction table building
+    SBCpip::set_config_param("penalty_factor", input$penalty_factor)
     
     # Other model/prediction/validation parameters
-    set_config_param("history_window", input$history_window)
-    set_config_param("lag_window", input$lag_window)
-    set_config_param("start", input$start)
-    set_config_param("model_update_frequency", input$model_update_frequency)
-    set_config_param("l1_bounds", seq(from = input$l1_bound_range[2], to = input$l1_bound_range[1], by = -2))
-    set_config_param("lag_bounds", c(-1, input$lag_bound))
+    SBCpip::set_config_param("history_window", input$history_window)
+    SBCpip::set_config_param("lag_window", input$lag_window)
+    SBCpip::set_config_param("start", input$start)
+    SBCpip::set_config_param("model_update_frequency", input$model_update_frequency)
+    SBCpip::set_config_param("l1_bounds", seq(from = input$l1_bound_range[2], to = input$l1_bound_range[1], by = -2))
+    SBCpip::set_config_param("lag_bounds", c(-1, input$lag_bound))
     
     loggit::loggit(log_lvl = "INFO", log_msg = "Settings saved.")
 
-    shinyalert("Success", "The model settings have been saved successfully.")
+    shinyalert::shinyalert("Success", "The model settings have been saved successfully.")
     
   })
   
@@ -536,7 +552,7 @@ server <- function(input, output, session) {
     db_tables <- db %>% DBI::dbListTables()
     if ("pred_cache" %in% db_tables) db %>% DBI::dbRemoveTable("pred_cache")
     if ("model" %in% db_tables) db %>% DBI::dbRemoveTable("model")
-    shinyalert("Success", "The cached predictions have been cleared.")
+    shinyalert::shinyalert("Success", "The cached predictions have been cleared.")
   })
   
   # Build the full database using files in config$data_folder.
@@ -669,7 +685,7 @@ server <- function(input, output, session) {
     }
     
     if (model_age == 1L) {
-      shinyalert("Note", "Model is retraining - this may take some time to complete.")
+      shinyalert::shinyalert("Note", "Model is retraining - this may take some time to complete.")
     }
     
     pr <- db %>% SBCpip::predict_for_date_db(config = config, date = input$predictDate) %>%

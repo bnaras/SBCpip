@@ -7,6 +7,8 @@
 sbc_build_and_save_seed_db(conn, pred_start_date, config)
 }
 \arguments{
+\item{conn}{the active database connection object}
+
 \item{pred_start_date, }{the start date for the prediction, used to specify
 date range for the seed dataset.}
 

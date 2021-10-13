@@ -1,45 +1,13 @@
 #%%%%%%%%%%%%%%%%% Prediction Helper Functions %%%%%%%%%%%%%%%%%
 
-#' Generate .RDS file for seed data to be used in prediction
-#'
-#' @param pred_start_date, the start date for the prediction, used to specify
-#'     date range for the seed dataset.
-#' @param config the site-specific configuration
-#' @return nothing (saves an RDS file with the seed data for 1 day before prediction date)
-#' @importFrom loggit set_logfile loggit
-#' @importFrom magrittr %<>%
-#' @export
-sbc_build_and_save_seed_data <- function(pred_start_date, config) {
-  
-  seed_start_date <- pred_start_date - config$history_window - 1L
-  seed_end_date <- pred_start_date - 1L
-  all_seed_dates <- seq.Date(from = seed_start_date, to = seed_end_date, by = 1L)
-  
-  seed_data <- list(cbc = NULL, census = NULL, transfusion = NULL, surgery = NULL, inventory = NULL)
-  
-  for (i in seq_along(all_seed_dates)) {
-    date_str <- as.character(all_seed_dates[i])
-    data_single_day <- process_data_for_date(config = config, date = date_str)
-    seed_data$cbc %<>% rbind(data_single_day$cbc)
-    seed_data$census %<>% rbind(data_single_day$census)
-    seed_data$surgery %<>% rbind(data_single_day$surgery)
-    seed_data$transfusion %<>% rbind(data_single_day$transfusion)
-    seed_data$inventory %<>% rbind(data_single_day$inventory)
-  }
-  
-  # Save the seed dataset
-  ################ REPLACE WITH DATABASE CALL #######################
-  saveRDS(object = seed_data,
-          file = file.path(config$output_folder,
-                           sprintf(config$output_filename_prefix, as.character(seed_end_date))))
-}
-
 #' Generate seed database for use in prediction
 #'
+#' @param conn the active database connection object
 #' @param pred_start_date, the start date for the prediction, used to specify
 #'     date range for the seed dataset.
 #' @param config the site-specific configuration
 #' @return nothing (saves an RDS file with the seed data for 1 day before prediction date)
+#' @importFrom DBI dbRemoveTable
 #' @importFrom loggit set_logfile loggit
 #' @importFrom magrittr %<>%
 #' @importFrom dplyr copy_to
@@ -53,9 +21,9 @@ sbc_build_and_save_seed_db <- function(conn, pred_start_date, config) {
   if (tolower(overwrite) != "yes" & tolower(overwrite) != "y") {
     stop("Seed data build stopped.")
   }
-  try(dbRemoveTable(conn, "model"), TRUE)
-  try(dbRemoveTable(conn, "data_scaling"), TRUE)
-  try(dbRemoveTable(conn, "pred_cache"), TRUE)
+  try(DBI::dbRemoveTable(conn, "model"), TRUE)
+  try(DBI::dbRemoveTable(conn, "data_scaling"), TRUE)
+  try(DBI::dbRemoveTable(conn, "pred_cache"), TRUE)
   
   seed_start_date <- pred_start_date - config$history_window - 1L
   seed_end_date <- pred_start_date - 1L
@@ -106,6 +74,7 @@ gather_dates_by_pattern <- function(data_folder, pattern) {
 #' 
 #' @return nothing (saves an RDS file with the seed data for 1 day before prediction date)
 #' @importFrom loggit set_logfile loggit
+#' @importFrom DBI dbRemoveTable
 #' @importFrom magrittr %<>%
 #' @importFrom dplyr copy_to
 #' @export
@@ -113,14 +82,9 @@ sbc_build_and_save_full_db <- function(conn, config, updateProgress = NULL) {
   
   if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
   
-  # Remove the model and data_scaling tables because we are setting up a new set of seed data.
-  #overwrite <- readline(prompt="This function will overwrite existing data tables. Continue? ")
-  #if (tolower(overwrite) != "yes" & tolower(overwrite) != "y") {
-  #  stop("Seed data build stopped.")
-  #}
-  try(dbRemoveTable(conn, "model"), TRUE)
-  try(dbRemoveTable(conn, "data_scaling"), TRUE)
-  try(dbRemoveTable(conn, "pred_cache"), TRUE)
+  try(DBI::dbRemoveTable(conn, "model"), TRUE)
+  try(DBI::dbRemoveTable(conn, "data_scaling"), TRUE)
+  try(DBI::dbRemoveTable(conn, "pred_cache"), TRUE)
   
   # Use filename prefixes instead of hardcoding the patterns here
   cbc_dates <- gather_dates_by_pattern(config$data_folder, paste0(config$cbc_filename_prefix, "*"))
@@ -174,35 +138,6 @@ sbc_build_and_save_full_db <- function(conn, config, updateProgress = NULL) {
   c(all_dates[1], all_dates[2])
 }
 
-#' Predict product usage and corresponding collect schedule over specified date range
-#'
-#' @param pred_start_date, the start date for the prediction, used to specify
-#'     date range for the seed dataset.
-#' @param num_days, the number of days to predict from pred_start_date
-#' @param config the site-specific configuration
-#' @return a prediction tibble named prediction_df with a column for date and the prediction.
-#'     This function is essentially a wrapper for SBCpip::predict_for_date across a specific
-#'     date range.
-#' @note Assumes that the config output folder contains a seed dataset labeled one day prior
-#'     to the prediction date range.
-#' @importFrom loggit loggit
-#' @export
-sbc_predict_for_range <- function(pred_start_date, num_days, config) {
-  
-  pred_end_date <- pred_start_date + num_days
-  all_pred_dates <- seq.Date(from = pred_start_date + 1L, to = pred_end_date + 1L, by = 1L)
-  
-  prediction_df <- NULL
-  for (i in seq_along(all_pred_dates)) {
-    date_str <- as.character(all_pred_dates[i])
-    loggit::loggit(log_lvl = "INFO", log_msg = paste0("Predicting for date: ", date_str))
-    result <- predict_for_date(config = config, date = date_str)
-    prediction_df <- rbind(prediction_df,result)
-  }
-  
-  prediction_df
-}
-
 #' Database version of range prediction
 #'
 #' @param conn, the database connection object
@@ -244,156 +179,6 @@ sbc_predict_for_range_db <- function(conn, pred_start_date, num_days, config, up
 }
 
 #' Given the configuration and prediction data frame, build a prediction table
-#'
-#' @param config the site configuration
-#' @param start_date the starting date in YYYY-mm-dd format
-#' @param end_date the end date in YYYY-mm-dd format, by default today plus 2 days
-#' @param generate_report a flag indicating whether a report needs to
-#'     be generated as a side effect
-#' @param min_inventory the minimum that needs to be in inventory,
-#'     by default what was used in the training, which is config$c0.
-#' @return a tibble of several variables, including all columns of
-#'     prediction_df, plus units expiring in a day (r1), units
-#'     expiring in 2 days (r2), waste (w), collection units (x),
-#'     shortage (s) and y prediction and the platelet usage for that
-#'     date, suggested values in case of inventory minimum is not met,
-#'     inventory columns if available
-#' @importFrom magrittr %>%
-#' @importFrom rlang .data
-#' @importFrom dplyr select left_join lead
-#' @importFrom tibble as_tibble
-#' @export
-build_prediction_table <- function(config, start_date, end_date = Sys.Date() + 2, generate_report = TRUE,
-                                   offset = config$start - 1,
-                                   min_inventory = config$min_inventory) {
-  
-  dates <- seq.Date(from = start_date, to = end_date, by = 1)
-  output_files <- list.files(path = config$output_folder,
-                             pattern = paste0("^",
-                                              sprintf(config$output_filename_prefix, as.character(end_date))),
-                             full.names = TRUE)
-  
-  if (length(output_files) == 0) {
-    stop(sprintf("No output file found for the prediction end date: %s", as.character(end_date)))
-  }
-  
-  ################ REPLACE WITH DATABASE CALL ##################
-  d <- readRDS(tail(output_files, 1L))
-  
-  # IMPORTANT:
-  # d$dataset only includes the "history_window" used to retrain the model + 7 days
-  # d$prediction_df includes all dates in the prediction range
-  # d$transfusion, d$census, etc. include all seed dates + prediction dates
-  d2 <- tail(d$transfusion, nrow(d$prediction_df)) %>%
-    dplyr::rename(plt_used = .data$used) %>% 
-    dplyr::distinct(date, .keep_all = TRUE)
-  
-  # Important to replace plt_used and t_pred NA values with 0
-  tibble::tibble(date = dates) %>%
-    dplyr::left_join(d2, by = "date") %>%
-    dplyr::left_join(d$prediction_df, by = "date") %>%
-    distinct(date, .keep_all = TRUE) %>%
-    tidyr::replace_na(list(plt_used = 0, t_pred = 0)) ->
-    prediction_df
-  
-  N <- nrow(prediction_df)
-  if (offset >= N) {
-    loggit::loggit(log_lvl = "ERROR", log_msg = "Not enough predictions!")
-    stop("Not enough predictions!")
-  }
-  
-  y <- prediction_df$plt_used
-  t_pred <- prediction_df$t_pred
-  initial_expiry_data <- config$initial_expiry_data
-  pred_mat <- matrix(0, nrow = N + 3, ncol = 11)
-  colnames(pred_mat) <- c("Alert", "r1", "r2", "w", "x", "s", 
-                          "r1_adj", "r2_adj","w_adj", "x_adj", "s_adj")
-  
-  yma <- ma(y, window_size = config$start)
-  
-  pred_mat[offset + (1:3), "x"] <- config$initial_collection_data
-  pred_mat[offset + (1:3), "x_adj"] <- config$initial_collection_data
-  index <- offset + 1
-  
-  pred_mat[index, "w"] <- pred_mat[index, "w_adj"] <- pip::pos(initial_expiry_data[1] - y[index])
-  pred_mat[index, "r1"] <- pred_mat[index, "r1_adj"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
-  pred_mat[index, "s"] <- pred_mat[index, "s_adj"] <- pip::pos(y[1] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
-  pred_mat[index, "r2"] <- pred_mat[index, "r2_adj"] <- pip::pos(pred_mat[1, "x"] - pip::pos(y[1]- initial_expiry_data[1] - initial_expiry_data[2]))
-  pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- max(floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - min(pred_mat[index, "r1"], yma[index]) - pred_mat[index, "r2"] + 1)),
-                                                                  config$c0)
-  
-  for (i in seq.int(index + 1L, N)) {
-    # These are the constraint parameters without adjusting for the minimum inventory
-    pred_mat[i, "w"] <- pip::pos(pred_mat[i - 1 , "r1"] - y[i])
-    pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
-    pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
-    pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
-    pred_mat[i + 3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] -min(pred_mat[i, "r1"], yma[i]) - pred_mat[i, "r2"] + 1)), 
-                                config$c0)
-    
-    # This set ensures that we have collected not only enough to satisfy our prediction, but
-    # also enough to replenish to our minimum inventory.
-    pred_mat[i, "w_adj"] <- pip::pos(pred_mat[i - 1 , "r1_adj"] - y[i])
-    pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
-    pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
-    pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
-    pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i,"r2_adj"]) 
-                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i, "r2_adj"])), 
-                                 config$c0)
-  }
-  
-  pred_mat[, "Alert"] <- (pred_mat[, "r1"] + pred_mat[, "r2"] <= min_inventory)
-  
-  d$inventory %>%     ## Drop the time part!
-    dplyr::mutate(date = as.Date(date)) ->
-    inventory
-  
-  tibble::as_tibble(cbind(prediction_df, pred_mat[seq_len(N), ])) %>%
-    dplyr::mutate(t_true = dplyr::lead(.data$plt_used, 1L) + dplyr::lead(.data$plt_used, 2L) + dplyr::lead(.data$plt_used, 3L)) %>%
-    dplyr::relocate(.data$t_true, .after = plt_used) %>%
-    dplyr::left_join(inventory, by = "date") ->
-    pred_table
-  
-  names(pred_table) <- c("date",
-                         "Platelet usage",
-                         "Three-day actual usage",
-                         "Three-day prediction",
-                         "Alert",
-                         "No. expiring in 1 day",
-                         "No. expiring in 2 days",
-                         "Waste",
-                         "No. to collect per prediction",
-                         "Shortage",
-                         "Adj. no. expiring in 1 day",
-                         "Adj. no. expiring in 2 days",
-                         "Adj. waste",
-                         "Adj. no. to collect",
-                         "Adj. shortage",
-                         "Inv. count",
-                         "Inv. expiring in 1 day",
-                         "Inv. expiring in 2 days",
-                         "Inv. expiring in 2+ days")
-  
-  # Compute "true" values for waste, fresh collections, and shortage
-  pred_table %>%
-    dplyr::mutate(`True Waste` = pip::pos(.data$`Inv. expiring in 1 day` - .data$`Platelet usage`)) %>%
-    dplyr::mutate(`Fresh Units Collected` = dplyr::lead(.data$`Inv. count`, 1) - .data$`Inv. count` +
-                    .data$`Platelet usage` + .data$`True Waste`) %>%
-    dplyr::mutate(`True Shortage` = pip::pos(.data$`Platelet usage` - .data$`Inv. count` - .data$`Fresh Units Collected`)) ->
-    pred_table
-  
-  if (generate_report) {
-    todays_date <- as.character(Sys.Date(), format = "%Y-%m-%d")
-    filename <- sprintf("prediction-report-%s", todays_date)
-    save_report_file(report_tbl = pred_table,
-                     report_folder = config$report_folder,
-                     filename = filename)
-  }
-  
-  pred_table
-}
-
-#' Database version of build_prediction_table
 #'
 #' @param conn the database connection obejct
 #' @param config the site configuration
@@ -438,8 +223,8 @@ build_prediction_table_db <- function(conn,
     }
   }
   
-  #if ( !(as.Date(start_date) %in% pred_tbl$date) | !(as.Date(end_date) %in% pred_tbl$date))
-  #  stop("The prediction table must contain the requested dates.")
+  if ( !(as.Date(start_date) %in% pred_tbl$date) | !(as.Date(end_date) %in% pred_tbl$date))
+    stop("The prediction table must contain the requested dates.")
   
   dates <- seq.Date(from = start_date, to = end_date, by = 1L)
   
@@ -517,8 +302,8 @@ build_prediction_table_db <- function(conn,
     inventory
   
   tibble::as_tibble(cbind(pred_tbl_joined, pred_mat[seq_len(N), ])) %>%
-    dplyr::mutate(t_true = dplyr::lead(plt_used, 1L) + dplyr::lead(plt_used, 2L) + dplyr::lead(plt_used, 3L)) %>%
-    dplyr::relocate(.data$t_true, .after = plt_used) %>%
+    dplyr::mutate(t_true = dplyr::lead(.data$plt_used, 1L) + dplyr::lead(.data$plt_used, 2L) + dplyr::lead(.data$plt_used, 3L)) %>%
+    dplyr::relocate(.data$t_true, .after = .data$plt_used) %>%
     dplyr::left_join(inventory, by = "date") ->
     pred_table
   
@@ -555,55 +340,12 @@ build_prediction_table_db <- function(conn,
   pred_table
 }
 
-#' Fetch model coefficients based on generated output files
-#' @param pred_start_date, the start date for the prediction, used to specify
-#'     date range for the seed dataset.
-#' @param num_days, the number of days to predict from pred_start_date
-#' @param config the site-specific configuration
-#' @return a data frame containing the coefficients generated during the prediction
-#'
-#' @importFrom loggit loggit
-#' @importFrom dplyr relocate
-#' @importFrom magrittr %>%
-#' @export
-build_coefficient_table <- function(pred_start_date, num_days, config) {
-  # Collect model coefficients over all output files (only need one set per week)
-  
-  model_coefs <- NULL
-  pred_end_date <- pred_start_date + num_days
-  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1L)
-  
-  # Read model coefs according to cadence of output frequency
-  for (i in seq_along(all_pred_dates)) {
-    date <- all_pred_dates[i]
-    output_file <- list.files(path = config$output_folder,
-                              pattern = sprintf(config$output_filename_prefix, date),
-                              full.names = TRUE)
-    
-    if (length(output_file) == 0L) {
-      print(paste0("No output files generated for date ", date))
-    }
-    else {
-      ############### REPLACE WITH DATABASE CALL ####################
-      d <- readRDS(output_file)
-      model_coefs %>% rbind(c(d$model$coefs, 
-                              l1_bound = d$model$l1_bound, 
-                              lag_bound = d$model$lag_bound)) -> model_coefs
-      print(paste("Added model coefs for day", i))
-    }
-  }
-  coef.tbl <- tibble::as_tibble(model_coefs)
-  coef.tbl$date <- all_pred_dates
-  coef.tbl %>% dplyr::relocate(date) -> coef.tbl
-  coef.tbl
-}
-
-#' Database version of build_coefficient_table
+#' Build a table of coefficients over the prediction period based on the database model table
+#' 
 #' @param conn the active database connection object
 #' @param pred_start_date, the start date for the prediction, used to specify
 #'     date range for the seed dataset.
 #' @param num_days, the number of days to predict from pred_start_date
-#' @param config the site-specific configuration
 #' @return a data frame containing the coefficients generated during the prediction
 #'
 #' @importFrom loggit loggit
@@ -630,49 +372,6 @@ build_coefficient_table_db <- function(conn, pred_start_date, num_days) {
   model_tbl
 }
 
-#' Generate the full dataset used for prediction without relying on output RDS files
-#'
-#' Useful for applying different prediction techniques to the same data. Note that
-#' this has the side-effect of producing reports in the report folder for each date due
-#' to the process_data_for_date function.
-#'
-#' @param pred_start_date, the start date for the prediction, used to specify
-#'     date range for the seed dataset.
-#' @param num_days, the number of days to predict from pred_start_date
-#' @param config the site-specific configuration
-#' @return a dataset tibble with date, product usage (transfusion), CBC, census, and inventory
-#' @importFrom dplyr left_join rename mutate
-#' @importFrom magrittr %>% %<>%
-#' @export
-generate_full_dataset <- function(pred_start_date, num_days, config) {
-  pred_end_date <- pred_start_date + num_days
-  pred_inputs <- list(cbc = NULL, census = NULL, transfusion = NULL, inventory = NULL)
-  all_pred_dates <- seq.Date(from = pred_start_date, to = pred_end_date, by = 1L)
-  
-  for (i in seq_along(all_pred_dates)) {
-    date_str <- as.character(all_pred_dates[i])
-    inputs_single_day <- process_data_for_date(config = config, date = date_str)
-    pred_inputs$cbc %<>% rbind(inputs_single_day$cbc)
-    pred_inputs$census %<>% rbind(inputs_single_day$census)
-    pred_inputs$transfusion %<>% rbind(inputs_single_day$transfusion)
-    pred_inputs$inventory %<>% rbind(inputs_single_day$inventory)
-  }
-  
-  full_dataset <- create_cbc_features(pred_inputs$cbc, config$cbc_quantiles)
-  pred_inputs$inventory$date %<>% as.Date()
-  full_dataset %>%
-    dplyr::left_join(pred_inputs$census, by="date") %>%
-    dplyr::left_join(pred_inputs$transfusion, by="date") %>%
-    dplyr::left_join(pred_inputs$inventory, by="date") %>%
-    dplyr::mutate(dow = weekdays(date)) -> full_dataset
-  
-  full_dataset %>% distinct() %>%
-    dplyr::rename(plt_used = .data$used) %>%
-    dplyr::mutate(lag = ma(.data$plt_used, window_size = 7L)) -> full_dataset
-  
-  full_dataset
-}
-
 #%%%%%%%%%%%%%%%%% Prediction Table Analysis Wrapper Functions %%%%%%%%%%%%%%%%%
 #' Plot the predicted vs. true product usage over the appropriate date range
 #'
@@ -691,8 +390,8 @@ plot_pred_vs_true_usage <- function(pred_table) {
     dplyr::filter(date < last_day)
   
   ggplot2::ggplot(data=pred_table_trunc) +
-    ggplot2::geom_line(ggplot2::aes(x=date, y=`Three-day actual usage`)) +
-    ggplot2::geom_line(ggplot2::aes(x=date, y=`Three-day prediction`))
+    ggplot2::geom_line(ggplot2::aes(x=date, y=.data$`Three-day actual usage`)) +
+    ggplot2::geom_line(ggplot2::aes(x=date, y=.data$`Three-day prediction`))
 }
 
 #' Compute the loss value on a validation or test dataset from the original
@@ -724,18 +423,6 @@ projection_loss <- function(pred_table, config) {
                             penalty_factor = config$penalty_factor,
                             lo_inv_limit = config$lo_inv_limit,
                             hi_inv_limit = config$hi_inv_limit)
-  
-  #adj_loss <- pip::compute_loss(preds = pred_table_trunc$`Three-day prediction`, 
-  #                              y = pred_table$`Platelet usage`,
-  #                              w = matrix(pred_table_trunc$`Adj. waste`, ncol = 1),
-  #                              r1 = matrix(pred_table_trunc$`Adj. no. expiring in 1 day`, ncol = 1),
-  #                              r2 = matrix(pred_table_trunc$`Adj. no. expiring in 2 days`, ncol = 1),
-  #                              s = matrix(pred_table_trunc$`Adj. shortage`, ncol = 1),
-  #                              penalty_factor = config$penalty_factor,
-  #                              lo_inv_limit = config$lo_inv_limit,
-  #                              hi_inv_limit = config$hi_inv_limit)
-  
-  #list(`Avg. Daily Loss` = loss, `Adj. Avg. Daily Loss` = adj_loss)
   
   list(`Avg. Daily Loss` = loss)
   
@@ -859,22 +546,25 @@ pred_table_analysis <- function(pred_table, config) {
 #' @param top_n the number of coefficients that are reported in the table
 #' @return a list containing the top 20 coefficient by sum of magnitudes over the analyzed period, 
 #' as well as the mean and standard deviation of their values.
+#' @importFrom dplyr select mutate group_by summarize arrange slice_head
+#' @importFrom tidyr pivot_longer 
+#' @importFrom dplyr desc
 #' @export
 coef_table_analysis <- function(coef_table, config, top_n = 25L) {
   dows <- c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
   # sum the absolute values of all of the coefficients (except intercept). 
   # Display 20 coefficients in order of largest absolute sums and state average value over period
   coef_table %>% 
-    dplyr::select(-c(intercept, lag_bound, age)) %>%
+    dplyr::select(-c(.data$intercept, .data$lag_bound, .data$age)) %>%
     tidyr::pivot_longer(-c(date), names_to = "feat") %>%
-    dplyr::mutate(abs_val = abs(value)) %>%
-    dplyr::group_by(feat) %>%
-    dplyr::summarize(abs_sum = sum(abs_val), avg = mean(value), sd = sd(value)) %>% 
-    dplyr::arrange(desc(abs_sum)) %>%
+    dplyr::mutate(abs_val = abs(.data$value)) %>%
+    dplyr::group_by(.data$feat) %>%
+    dplyr::summarize(abs_sum = sum(.data$abs_val), avg = mean(.data$value), sd = sd(.data$value)) %>% 
+    dplyr::arrange(desc(.data$abs_sum)) %>%
     dplyr::slice_head(n = top_n) %>%
-    dplyr::select(c(feat, avg, sd)) -> top_coefs
+    dplyr::select(c(.data$feat, .data$avg, .data$sd)) -> top_coefs
   
   # separate day of week and other features
-  list(dow = top_coefs %>% filter(feat %in% dows), 
-       other = top_coefs %>% filter(!(feat %in% dows)))
+  list(dow = top_coefs %>% filter(.data$feat %in% dows), 
+       other = top_coefs %>% filter(!(.data$feat %in% dows)))
 }
