@@ -373,27 +373,6 @@ build_coefficient_table_db <- function(conn, pred_start_date, num_days) {
 }
 
 #%%%%%%%%%%%%%%%%% Prediction Table Analysis Wrapper Functions %%%%%%%%%%%%%%%%%
-#' Plot the predicted vs. true product usage over the appropriate date range
-#'
-#' @param pred_table, the prediction table generated from SBCpip::build_prediction_table
-#'
-#' @importFrom dplyr filter
-#' @importFrom ggplot2 ggplot geom_line aes
-#' @importFrom magrittr %>%
-#' @export
-plot_pred_vs_true_usage <- function(pred_table) {
-  
-  first_day <- pred_table$date[1L]
-  last_day <- pred_table$date[nrow(pred_table) - 3L] # predictions end 3 days early
-  pred_table_trunc <- pred_table %>%
-    dplyr::filter(date >= first_day) %>%
-    dplyr::filter(date < last_day)
-  
-  ggplot2::ggplot(data=pred_table_trunc) +
-    ggplot2::geom_line(ggplot2::aes(x=date, y=.data$`Three-day actual usage`)) +
-    ggplot2::geom_line(ggplot2::aes(x=date, y=.data$`Three-day prediction`))
-}
-
 #' Compute the loss value on a validation or test dataset from the original
 #' and adjusted waste and inventory levels based on model projections.
 #'
@@ -421,8 +400,7 @@ projection_loss <- function(pred_table, config) {
                             r2 = matrix(pred_table_trunc$`No. expiring in 2 days`, ncol = 1),
                             s = matrix(pred_table_trunc$Shortage, ncol = 1),
                             penalty_factor = config$penalty_factor,
-                            lo_inv_limit = config$lo_inv_limit,
-                            hi_inv_limit = config$hi_inv_limit)
+                            rss_bias = config$prediction_bias)
   
   list(`Avg. Daily Loss` = loss)
   
@@ -458,8 +436,7 @@ real_loss <- function(pred_table, config) {
                             r2 = matrix(remaining_inventory, ncol = 1), # This is incorrect. Need to break up remaining_inventory
                             s = matrix(pred_table_trunc$`True Shortage`, ncol = 1),
                             penalty_factor = config$penalty_factor,
-                            lo_inv_limit = config$lo_inv_limit,
-                            hi_inv_limit = config$hi_inv_limit)
+                            rss_bias = config$prediction_bias)
   
   list(`Real Avg. Daily Loss` = loss)
   

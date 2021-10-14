@@ -232,11 +232,11 @@ body <- dashboardBody(
                                 , min = 0
                                 , max = 50
                                 , value = get_SBC_config()$c0)
-                  , sliderInput(inputId = "loss_inventory_range"
+                  , sliderInput(inputId = "prediction_bias"
                                 , label = "Cross-Validation Prediction Bias (units):"
                                 , min = 0
                                 , max = 100
-                                , value = get_SBC_config()$lo_inv_limit)
+                                , value = get_SBC_config()$prediction_bias)
                   , sliderInput(inputId = "penalty_factor"
                                 , label = "Shortage Penalty Factor (X unit Wasted : 1 units Short):"
                                 , min = 0
@@ -485,8 +485,7 @@ server <- function(input, output, session) {
 
     # Inventory parameters
     SBCpip::set_config_param("c0", input$c0) # for training and cross-validation
-    SBCpip::set_config_param("lo_inv_limit", input$loss_inventory_range[1]) # for loss function
-    SBCpip::set_config_param("hi_inv_limit", input$loss_inventory_range[2]) # for loss function
+    SBCpip::set_config_param("prediction_bias", input$prediction_bias) # for loss function
     SBCpip::set_config_param("min_inventory", 0) # for prediction table building
     SBCpip::set_config_param("penalty_factor", input$penalty_factor)
     

@@ -11,7 +11,9 @@ output:
   html_document: null
 bibliography: platelet.bib
 vignette: |
-  %\VignetteIndexEntry{Stanford Blood Center Operating Procedures} %\VignetteEngine{knitr::rmarkdown} \usepackage[utf8]{inputenc}
+  %\VignetteIndexEntry{Stanford Blood Center Operating Procedures} 
+  %\VignetteEngine{knitr::rmarkdown} 
+  \usepackage[utf8]{inputenc}
 ---
 
 # Introduction
@@ -30,8 +32,9 @@ package. The main job of `SBCpip` is to provide functionality
 tailor-made for the workflow in use at SBC. This task may sometimes be
 quite involved and prone to change.
 
-The separation makes it possible for sites to modify both packages to
-make use of many other features besides those used in the reference.
+The separation makes it possible for sites to focus on modifying `SBCpip` to
+make use of many other features besides those used in the reference. `SBCpip`
+also offers many options for site-specific feature customization out of the box.
 
 
 # Main Contents of this Package 
@@ -169,6 +172,7 @@ build the full database based on all available data files
 ```{r, eval = FALSE}
 library(DBI)
 library(duckdb)
+library(magrittr)
 
 set_config_param(param = "database_path",
                  value = "/Users/username/Desktop/SBCpip.duckdb")

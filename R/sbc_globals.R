@@ -49,8 +49,7 @@ SBC_config <- function() {
         min_inventory = 30, ## the minimum inventory
         history_window = 200,  ## how many days to use in training
         penalty_factor = 15,   ## penalty factor to use in training
-        lo_inv_limit = 10,    ## inventory count below which we penalize result 
-        hi_inv_limit = 60,    ## inventory count above which we penalize result
+        prediction_bias = 10,    ## inventory count below which we penalize result 
         start = 10, ## the day we start the model evaluation
         initial_collection_data = c(60, 60, 60), ## the initial number that will be collected for the first three days
         initial_expiry_data = c(0, 0), ## the number of units that expire a day after, and two days after respectively
@@ -152,6 +151,7 @@ reset_config <- function() {
 #' @param param the name of the variable as a string
 #' @param value the value to assign
 #' @return the changed value of the package global \code{sbc_config} invisibly
+#' @importFrom loggit loggit
 #' @export
 #'
 set_config_param <- function(param, value) {
@@ -205,19 +205,20 @@ set_initial_collection_data <- function(value) {
 
 #' Set the important column names contained in the organization's file types
 #'
-#' @param file_type one of c("cbc", "census", "surgery", "transfusion", "inventory")
 #' @return the changed value of the package global \code{sbc_config}
 #'     invisibly
+#' @importFrom utils read.csv
+#' @importFrom dplyr filter
 #' @export
 #'
 set_org_col_params <- function() {
   data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
   data_mapping_file <- system.file("extdata", "sbc_data_mapping.csv", package = "SBCpip")
   sapply(data_tables, function(table_name) {
-    data_mapping <- read.csv(data_mapping_file)
-    invisible(SBCpip::set_config_param(sprintf("org_%s_cols", table_name),
-                                       (data_mapping %>%
-                                          dplyr::filter(data_file == table_name))$org_data_column_name_to_edit))
+    data_mapping <- utils::read.csv(data_mapping_file)
+    invisible(set_config_param(sprintf("org_%s_cols", table_name),
+                               (data_mapping %>%
+                                  dplyr::filter(.data$data_file == table_name))$org_data_column_name_to_edit))
   })
 }
 
@@ -227,6 +228,7 @@ set_org_col_params <- function() {
 #' config$census_filename_prefix, config$surgery_filename_prefix to be valid.
 #'
 #' @return a list of the cbc, census, and surgery features derived from the data file
+#' @importFrom readr read_tsv
 #' @export
 #'
 set_features_from_file <- function() {

@@ -1143,10 +1143,10 @@ process_all_inventory_files <- function(data_folder,
 #' @param date the date string for which the data is to be processed in "YYYY-mm-dd" format
 #' @param prev_day the previous date, default NA, which means it is computed from date
 #' @param eval TRUE or FALSE value for whether to evaluate model during predictions
+#' @return a prediction tibble named prediction_df with a column for date and the prediction
 #' @importFrom pip build_model predict_three_day_sum evaluate_model
 #' @importFrom magrittr %>%
 #' @importFrom dplyr group_by summarize_all
-#' @return a prediction tibble named prediction_df with a column for date and the prediction
 #' @importFrom loggit set_logfile loggit
 #' @export
 predict_for_date <- function(config,
@@ -1307,8 +1307,7 @@ predict_for_date <- function(config,
                                             c0 = config$c0,
                                             history_window = config$history_window,
                                             penalty_factor = config$penalty_factor,
-                                            lo_inv_limit = config$lo_inv_limit,
-                                            hi_inv_limit = config$hi_inv_limit,
+                                            rss_bias = config$prediction_bias,
                                             start = config$start,
                                             l1_bounds = config$l1_bounds,
                                             lag_bounds = config$lag_bounds)
@@ -1319,8 +1318,7 @@ predict_for_date <- function(config,
                         train_window = config$history_window - 14L,
                         test_window = 14L,
                         penalty_factor = config$penalty_factor,
-                        lo_inv_limit = config$lo_inv_limit,
-                        hi_inv_limit = config$hi_inv_limit,
+                        rss_bias = config$prediction_bias,
                         start = config$start,
                         l1_bounds = config$l1_bounds,
                         lag_bounds = config$lag_bounds)
@@ -1383,13 +1381,13 @@ predict_for_date <- function(config,
 #' @param date the date string for which the data is to be processed in "YYYY-mm-dd" format
 #' @param prev_day the previous date, default NA, which means it is computed from date
 #' @param eval TRUE or FALSE value for whether to evaluate model during predictions
+#' @return a prediction tibble named prediction_df with a column for date and the prediction
 #' @importFrom pip build_model predict_three_day_sum evaluate_model
 #' @importFrom magrittr %>%
 #' @importFrom dplyr tbl collect rows_upsert filter select distinct copy_to mutate relocate
 #' @importFrom tidyselect all_of
 #' @importFrom DBI dbIsValid dbListTables
 #' @importFrom tibble tibble
-#' @return a prediction tibble named prediction_df with a column for date and the prediction
 #' @importFrom loggit set_logfile loggit
 #' @export
 predict_for_date_db <- function(conn, config,
@@ -1521,8 +1519,7 @@ predict_for_date_db <- function(conn, config,
                                   c0 = config$c0,
                                   history_window = config$history_window,
                                   penalty_factor = config$penalty_factor,
-                                  lo_inv_limit = config$lo_inv_limit,
-                                  hi_inv_limit = config$hi_inv_limit,
+                                  rss_bias = config$prediction_bias,
                                   start = config$start,
                                   l1_bounds = config$l1_bounds,
                                   lag_bounds = config$lag_bounds)
@@ -1544,8 +1541,7 @@ predict_for_date_db <- function(conn, config,
                                 train_window = config$history_window - 14L,
                                 test_window = 14L,
                                 penalty_factor = config$penalty_factor,
-                                lo_inv_limit = config$lo_inv_limit,
-                                hi_inv_limit = config$hi_inv_limit,
+                                rss_bias = config$prediction_bias,
                                 start = config$start,
                                 l1_bounds = config$l1_bounds,
                                 lag_bounds = config$lag_bounds)
@@ -1685,6 +1681,8 @@ upsert_db <- function(conn, df_name, new_row, by = "date") {
     if (row_exists) {
         DBI::dbExecute(conn, sprintf("DELETE FROM %s WHERE %s = '%s'", df_name, by, as.character(new_row[[by]])))
     }
-    DBI::dbExecute(conn, insert_command, as.list(new_row))
+    exec <- DBI::dbExecute(conn, insert_command, as.list(new_row))
+    
+    invisible(exec)
 }
 

@@ -6,9 +6,6 @@
 \usage{
 set_org_col_params()
 }
-\arguments{
-\item{file_type}{one of c("cbc", "census", "surgery", "transfusion", "inventory")}
-}
 \value{
 the changed value of the package global \code{sbc_config}
     invisibly

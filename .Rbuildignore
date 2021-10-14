@@ -9,8 +9,5 @@
 ^codecov\.yml$
 ^LICENSE\.md$
 ^CRAN-RELEASE$
-^inst/misc
-^inst/doc$
-^doc$
 ^Meta$
 ^LICENSE$
