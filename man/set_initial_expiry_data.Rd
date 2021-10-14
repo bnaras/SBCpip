@@ -2,7 +2,7 @@
 % Please edit documentation in R/sbc_globals.R
 \name{set_initial_expiry_data}
 \alias{set_initial_expiry_data}
-\title{Set the SBC initial number of units that will expire in a day and
+\title{Set the initial number of units that will expire in a day and
 the next}
 \usage{
 set_initial_expiry_data(value)
@@ -15,6 +15,6 @@ the changed value of the package global \code{sbc_config}
     invisibly
 }
 \description{
-Set the SBC initial number of units that will expire in a day and
+Set the initial number of units that will expire in a day and
 the next
 }

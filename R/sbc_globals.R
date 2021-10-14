@@ -64,7 +64,7 @@ SBC_config <- function() {
         log_filename_prefix = "SBCpip_%s.json",
         model_update_frequency = 7L, ## every 7 days
         lag_window = 7L,             ## number of previous days to average in smoothing
-        l1_bounds = seq(from = 200, to = 0, by = -2), ## allowed values of the l1 bound in cross validation
+        l1_bounds = seq(from = 60, to = 0, by = -2), ## allowed values of the l1 bound in cross validation
         lag_bounds = c(-1, 10),     ## Vector of possible bounds on the seven day moving average parameter (-1 = no bound)
         org_cbc_cols = c("ORDER_PROC_ID", "BASE_NAME", "RESULT_TIME", "ORD_VALUE"), ## organization's relevant CBC column headers
         org_census_cols = c("PAT_ID", "LOCATION_NAME", "LOCATION_DT"),              ## organization's relevant Census column headers
@@ -167,7 +167,7 @@ set_config_param <- function(param, value) {
 
 ## Some functions below specifically to ensure validation
 
-#' Set the SBC initial number of units that will expire in a day and
+#' Set the initial number of units that will expire in a day and
 #' the next
 #'
 #' @param value the value to assign, should be a non-negative 2-vector
@@ -185,7 +185,7 @@ set_initial_expiry_data <- function(value) {
     invisible(result)
 }
 
-#' Set the SBC initial number of units that will be collected for the
+#' Set the initial number of units that will be collected for the
 #' first three days
 #'
 #' @param value the value to assign, should be a non-negative 3-vector
@@ -201,4 +201,87 @@ set_initial_collection_data <- function(value) {
     result$initial_collection_data <- value
     assignInMyNamespace("sbc_config", result)
     invisible(result)
+}
+
+#' Set the important column names contained in the organization's file types
+#'
+#' @param file_type one of c("cbc", "census", "surgery", "transfusion", "inventory")
+#' @return the changed value of the package global \code{sbc_config}
+#'     invisibly
+#' @export
+#'
+set_org_col_params <- function() {
+  data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
+  data_mapping_file <- system.file("extdata", "sbc_data_mapping.csv", package = "SBCpip")
+  sapply(data_tables, function(table_name) {
+    data_mapping <- read.csv(data_mapping_file)
+    invisible(SBCpip::set_config_param(sprintf("org_%s_cols", table_name),
+                                       (data_mapping %>%
+                                          dplyr::filter(data_file == table_name))$org_data_column_name_to_edit))
+  })
+}
+
+#' Gather and set feature names from a single (most recent) data file
+#' 
+#' Requires config$data_folder, config$cbc_filename_prefix, 
+#' config$census_filename_prefix, config$surgery_filename_prefix to be valid.
+#'
+#' @return a list of the cbc, census, and surgery features derived from the data file
+#' @export
+#'
+set_features_from_file <- function() {
+  
+  config <- sbc_config
+  
+  ## Run this just in case to ensure we have org-specific columns set.
+  set_org_col_params()
+
+  ## Grab CBC Features
+  cbcFilename <- tail(list.files(path = config$data_folder, 
+                                 pattern = config$cbc_filename_prefix, 
+                                 full.names = TRUE), 1L)
+  
+  if (length(cbcFilename) == 0) 
+    stop("Please provide CBC files in the data folder.")
+  
+  cbcData <- readr::read_tsv(file = cbcFilename, 
+                             col_names = TRUE, 
+                             show_col_types = FALSE)
+  
+  cbcFeatures <- unique(cbcData[[config$org_cbc_cols[2]]])
+  
+  # Grab Census Features
+  censusFilename <- tail(list.files(path = config$data_folder, 
+                                    pattern = config$census_filename_prefix, 
+                                    full.names = TRUE), 1L)
+  
+  if (length(cbcFilename) == 0) 
+    stop("Please provide Census files in the data folder.")
+  
+  censusData <- readr::read_tsv(file = censusFilename, 
+                                col_names = TRUE, 
+                                show_col_types = FALSE)
+  
+  censusFeatures <- unique(censusData[[config$org_census_cols[2]]])
+  
+  
+  # Grab Surgery Features
+  surgeryFilename <- tail(list.files(path = config$data_folder, 
+                                     pattern = config$surgery_filename_prefix, 
+                                     full.names = TRUE), 1L)
+  
+  if (length(cbcFilename) == 0) 
+    stop("Please provide Surgery files in the data folder.")
+  
+  
+  surgeryData <- readr::read_tsv(file = surgeryFilename, 
+                                 col_names = TRUE, 
+                                 show_col_types = FALSE)
+  
+  surgeryFeatures <- unique(surgeryData[[config$org_surgery_cols[2]]])
+  
+  list(cbc = sort(cbcFeatures), 
+       census = sort(censusFeatures), 
+       surgery = sort(surgeryFeatures))
+  
 }

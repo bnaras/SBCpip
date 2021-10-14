@@ -568,3 +568,46 @@ coef_table_analysis <- function(coef_table, config, top_n = 25L) {
   list(dow = top_coefs %>% filter(.data$feat %in% dows), 
        other = top_coefs %>% filter(!(.data$feat %in% dows)))
 }
+
+#' Generate a recommendation for number of platelets to collect today based on 
+#' predicted usage.
+#'
+#' @param conn the active database connection object
+#' @param config the configuration object
+#' @param date the date on which we expect to collect new platelets
+#' @param pred predicted total platelet usage over the next [product_type + 1] days
+#' @param product_type either 1 or 2 depending on the number of days taken to 
+#'        prepare the blood product. 
+#' @param x_plus1 the number of platelets collected on day [date - product_type], 
+#'        which will be available on day [date]
+#' @param x_plus2 the number of platelets collected on day [date + 1 - product_type],
+#'        which will be available on day [date + 1]. Irrelevant if product_type == 1
+#' @param r_1 the number of platelets considered expired after [date]
+#' @param r_2 the number of platelets considered expired after [date + 1]
+#' @return recommended number of platelets to collect on [date]
+#' @importFrom DBI dbIsValid dbListTables
+#' @importFrom pip pos 
+#' @importFrom dplyr tbl collect filter
+#' @export
+recommend_collection <- function(conn, config, date, pred, product_type = 2L, 
+                                 x_plus1 = 30, x_plus2 = 30, r_1 = 0, 
+                                 r_2 = 0) {
+  
+  if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
+  db_tablenames <- DBI::dbListTables(conn)
+  if (!("transfusion" %in% db_tablenames)) {
+    stop("Database must contain at least the transfusion table.")
+  }
+  
+  transfusion_tbl <- conn %>% 
+    dplyr::tbl("transfusion") %>%
+    dplyr::collect() %>%
+    dplyr::filter(date > as.Date(date) - config$start & date <= as.Date(date))
+  
+  mean_y_recent <- as.integer(mean(as.numeric(transfusion_tbl$used)))
+  
+  x_2 <- x_plus2
+  if (product_type != 2) x2 <- 0 
+  
+  max(floor(pip::pos(pred - x_plus1 - x_2 - min(r_1, mean_y_recent) - r_2 + 1)), config$c0)
+}

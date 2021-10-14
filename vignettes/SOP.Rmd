@@ -34,23 +34,67 @@ quite involved and prone to change.
 The separation makes it possible for sites to modify both packages to
 make use of many other features besides those used in the reference.
 
-__Note__ Some of the steps described here are SBC-specific and so
-don't be surprised if you don't have access to the data referred to.
 
-## Steps
+## Main Contents of this Package 
 
-To get things started, one has to begin with some historical data on
-the CBC, census and transfusion to get the prediction pipeline going.
+* `R/sbc_globals.R`: Defines the global config object, which contains default values for various model parameters. Includes functions to get and set config values.
+* `R/prediction_wrapper.R`: Contains higher level functions that loop over the main functions described in `R/process_data.R` to process data files and generate predictions for a range of dates. Also includes functions that summarize predictions and model coefficients in a tabular format in order to analyze model performance.
+* `R/process_data.R`: Contains lower-level functions to preprocess input to the model and generate predictions. In particular, `SBCpip::process_data_for_date_db` reads in the appropriate data files for each date and inserts/updates relevant data to a local DuckDB database. `SBCpip::predict_for_date_db` reads preprocessed data for a range of dates from the database and generates a usage prediction for the next three days. Critically, all calls to the `pip` package are made from the function defined in this file.
+* `R/webapps.R`: Defines the function `SBCpip::sbc_dashboard()` which initializes the SBCpip Shiny Dashboard. The full dashboard code is contained in `inst/webapps/dashboard/app.R`.
+* `R/utilities.R`: Defines common helper functions for the above files.
+* `inst/extdata/sbc_data_mapping.csv`: Contains a table which the user must complete to map organization-specific data fields to those utilized by the Stanford Blood Center.
 
-The folder `Blood_Center` for example contains data for the period
-April 1, 2017 through April 9, 2018.  Note that the file created on
-April 9, for example, has data from the previous date.
+## How to use this package
+Most of the functionality of this package can be accessed either using a Shiny Dashboard interface or running the appropriate R functions separately. To start the Shiny Dashboard, simply run the following R commands:
 
-Such data can be used to build up a _seed_ database to start the
-prediction pipeline. 
+```{r}
+library(SBCpip)
+sbc_dashboard()
+```
 
+In either case, the overall predictive workflow for `SBCpip` is as follows:
+1. **Gather Data:** Collect appropriate organization-specific data files for all 
+dates of interest in a single directory and complete the provided data-mapping 
+template `sbc_data_mapping.csv` and CBC parsing template `cbc_thresholds.csv` 
+(see **Data Preparation** section below).
+2. **Build Seed Database:** Set appropriate database configurations and build a 
+DuckDB database with observed variables and responses (platelet usage). This is 
+accomplished using `SBCpip::sbc_build_and_save_full_db()`. This will convert data 
+files to an easily ingestible format and restrict model input to variables of 
+interest (see **Database Structure** section for more details). Configurations 
+can be set either through the Shiny interface or by adjusting the config object. 
+For parameters such as directory paths that are likely to remain fixed, we 
+recommend updating `sbc_globals.R` directly to avoid updating this information 
+each time (see **Model Behavior and Configuration** section for more details).
+3. **Adjust Model Settings:** Set model configurations such as training window 
+size, model update frequency, and possible hyperparameters. These configurations 
+can also be set either through the Shiny interface or by adjusting the config 
+object (see **Model Configuration** section).
+4. **Validate Model:** Validate the model on previous blood product usage. This 
+will allow the user to evaluate the model's performance on recent data and make 
+any necessary adjustments to model configurations before making projections based 
+on new data. This is accomplished using `SBCpip::sbc_predict_for_range_db`. After 
+predictions have been generated, the user can build a table of inventory levels, 
+waste, and shortage over the validation period using `SBCpip::build_prediction_table()` 
+and obtain summary statistics using `SBCpip::pred_table_analysis()`. Similarly, 
+the user can also build a table of the most prominent features used by the model 
+in making predictions over the validation period using `SBCpip::build_coefficient_table()` 
+and obtain a summary using `SBCpip::coef_table_analysis()`. All of these functions 
+are performed automatically for the user via the Shiny dashboard interface.
+5. **Predict for New Data:** The user adds data files for a new date to the specified
+data folder. Then based on observed input data and platelet usage 
+during the specified training window, the model outputs predicted platelet usage 
+for the next [three] days. Finally use current inventory levels to recommend 
+the appropriate number of fresh platelets to collect in [three] days time.
+6. **Predict for Subsequent Dates**: The user can repeat step 5 until the model
+retrains based on `config$model_update_frequency`.
 
-### Generating the Seed Data
+R functions for Steps 2-5 are described in more detail below. 
+For a detailed discussion of Step 1, please refer to the **Data Preparation** 
+section. For notes on using the point-and-click interface, please refer to the 
+**Shiny Dashboard** section. The dashboard abstracts away all of the code below.
+
+### Step 2: Building the Seed Database
 
 The seed database is generated exactly once. To build the seed
 database, follow the procedure below.
@@ -61,153 +105,345 @@ options(warn = 1) ## Report warnings as they appear
 ```
 
 The `config` object is a rather large object that contains all
-configuration information. It is documented with the
-package. Specifically, one can specify data folders, report folders
-and output folders, as the example below shows.
+configuration information. It contains many defaults values. Specifically, 
+one should first specify the folder that contains all of the data files as well 
+as the common prefixes for each type of data file (for a detailed list of config 
+parameters, see **Model Configuration** section). 
 
 ```{r, eval = FALSE}
 ## Specify the data location
 config <- set_config_param(param = "data_folder",
                            value = "full_path_to_historical_data")
 
-## Specify output folder; existing output files will be overwritten
-set_config_param(param = "output_folder",
-                 value = "full_path_to_output_folder")
-
-## Specify report folder; existing output files will be overwritten
-set_config_param(param = "report_folder",
-                 value = "full_path_to_report_folder")
-
 ## Specify log folder; existing log files will be overwritten
-## Also get a handle on the invisibly returned updated configuration
 config <- set_config_param(param = "log_folder",
                            value = "full_path_to_log_folder")
 
+## Specify a filename prefix for each input file type. The program assumes all 
+## prefixes are immediately followed by a date of the form "YYYY-MM-DD".
+set_config_param(param = "cbc_filename_prefix",    # CBC (complete blood count) data
+                 value = "cbc_prefix")
+set_config_param(param = "census_filename_prefix", # patient location data
+                 value = "census_prefix")
+set_config_param(param = "surgery_filename_prefix", # surgeries performed
+                 value = "surgery_prefix")
+set_config_param(param = "transfusion_filename_prefix", # actual blood product usage 
+                 value = "census_prefix")
+set_config_param(param = "inventory_filename_prefix", # actual inventory levels
+                 value = "census_prefix")
+## Note that you only need to return the global config once. Successive calls to 
+## set_config_param will update the value of the initial config object.
 ```
 
-One can then process all files in the data folder as follows and save
-the seed data.  Note that the files in the data folder are presumed to
-follow a naming pattern:
-- `LAB-BB-CSRP-CBC*` for CBC files
-- `LAB-BB-CSRP-Census*` for Census files
-- `LAB-BB-CSRP-Transfused*` for transfusion files. 
-
-The `process__all_...` functions below accept a `pattern` argument if
-you want to change them.
-
-
+Next, make sure to align the column headers in the organization's site-specific 
+data files with corresponding SBC fields using `SBCpip::set_org_col_params` 
+(see Step 1 above and **Data Preparation** section).
 ```{r, eval = FALSE}
-## This is for creating the seed dataset
-cbc <- process_all_cbc_files(data_folder = config$data_folder,
-                             cbc_abnormals = config$cbc_abnormals,
-                             cbc_vars = config$cbc_vars,
-                             verbose = config$verbose)
-
-census <- process_all_census_files(data_folder = config$data_folder,
-                                   locations = config$census_locations,
-                                   verbose = config$verbose)
-
-transfusion <- process_all_transfusion_files(data_folder = config$data_folder,
-                                             verbose = config$verbose)
-
-## Save the SEED dataset so that we can begin the process of building the model.
-## This gets us to date 2018-04-09-08-01-54.txt, so we save data using that date
-saveRDS(list(cbc = cbc, census = census, transfusion = transfusion),
-        file = file.path(config$output_folder,
-                         sprintf(config$output_filename_prefix, "2018-04-09")))
+set_org_col_params()
 ```
 
-At this point an `RDS` file is created that is sufficient to get
-started.
-
-## Processing Incremental Files
-
-Incremental files are also expected to follow a certain naming
-pattern. Default patterns are specified in the config variable. 
-
-- `config$cbc_filename_prefix` for cbc 
-- `config$census_filename_prefix` for census
-- `config$transfusion_filename_prefix` for transfusion
-- `config$inventory_file_name_prefix` for inventory (not used currently)
-
-One merely sets the data folder to point to the full path of the
-incremental files which is typically populated every day and proceed
-as below.
+Finally, provide a vector of specific CBC, Census, and Surgery variables whose 
+counts should be used as inputs to the model. For example, you may want to count
+the number of patients in certain locations of the hospital (Census) or the
+number of bone marrow transplant operations performed (Surgery) on a given day.
 
 ```{r, eval = FALSE}
+## Example using surgery variables (also make sure to set cbc_vars and census_locations)
+set_config_param(param = "surgery_services",
+                 value = c("Neurosurgery", "Thoracic", "Vascular", "Hepatology"))
 
-## Now process the incremental files
-## Point to folder containing incrementals
-config <- set_data_folder("full_path_to_incremental_data")
-## One may or may not choose to set the incremental reports to go
-## to another location as shown below.
-config <- set_report_folder("full_path_to_incremental_data_reports")
-## Same for output although not shown.
+## Alternatively, you can automatically discover and set config variables based on the
+## data files you have provided, assuming you have already run set_org_col_params().
+## However, typically the user will wish to use only a subset of these variables
+## based on their domain knowledge.
+set_features_from_file()
 
-By specifying, the starting and ending dates, one can process all files in one swoop.
-
-```{r, eval = FALSE}
-start_date <- as.Date("2018-04-10")
-end_date <- as.Date("2018-05-29")
-all_dates <- seq.Date(from = start_date, to = end_date, by = 1)
-
-prediction <- NULL
-
-for (i in seq_along(all_dates)) {
-    date_str <- as.character(all_dates[i])
-    ##print(date_str)
-    result <- predict_for_date(config = config, date = date_str)
-    prediction <- c(prediction, result$t_pred)
-}
 ```
 
-The above loop goes through several steps.
-
-1. It loads previous day's data
-2. It processes the incremental data and appends it to existing data
-3. It determines if the model needs to be updated. A parameter
-   `config$model_update_frequency` (default 7) decides how often the
-   model is retrained. The code can detect if the model is to be
-   constructed for the first time!
-4. If the model is retrained, the training dataset is constructed,
-   scaled, and scaling parameters stored for use in the
-   future. Otherwise, the existing scaling parameters are used to
-   construct the data set for prediction
-5. The prediction is made and results stored for the next day. The
-   current prediction is the three-day sum.
-
-## Daily Routine
-
-Thus, for daily routine, all that needs to be done is to call the
-function
+Now we are ready to build the local DuckDB seed database. First, specify the 
+path of the DuckDB database file to the `config` object. Then, we are ready to 
+build the full database based on all available data files
 
 ```{r, eval = FALSE}
-result <- predict_for_date(config = config)
+library(DBI)
+library(duckdb)
+
+set_config_param(param = "database_path",
+                 value = "/Users/username/Desktop/SBCpip.duckdb")
+
+## Create a database connection and then build the full database. This allows
+## the clean database to persist as a local file after the connection is closed.
+db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
+db %>% sbc_build_and_save_full_db(config)
+db %>% DBI::dbDisconnect(shutdown = TRUE)
+
+## You can also build the database based on a particular prediction start dates.
+## This fills the database with data files prior to the given date.
+db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
+pred_start_date <- as.Date('2020-06-20')
+
+db %>% sbc_build_and_save_seed_db(pred_start_date, config)
+db %>% DBI::dbDisconnect(shutdown = TRUE)
+
 ```
 
-This automatically assumes the date to be the current date. It can be
-specified if necessary using the `date` argument thus.
+You can now also access data from the database directly without relying on the abstraction functions
+described below. Simply run the following (refer to the **Database Structure** section
+for more details):
 
 ```{r, eval = FALSE}
-result <- predict_for_date(config = config, date = "2018-04-30")
+library(dplyr)
+
+db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
+cbc_tibble <- db %>% dplyr::tbl("cbc") %>% dplyr::collect() # load the cbc table as a tibble
+db %>% DBI::dbDisconnect(shutdown = TRUE)
+
 ```
 
-Note that this default daily routine makes the assumption that 
+**IMPORTANT**: If you change your variables in the `config` object, you must 
+remember to rebuild the database. Otherwise there will be a mismatch between
+the features that you load to make predictions on new data and existing
+columns in database tables.
+
+### Steps 3 and 4: Validating the Model and Tuning Training Parameters (Iterative)
+Now that we have a database of seed data (CBC, census, and surgery) for a range
+of dates, we are ready to begin prediction. Prior to predicting on new data,
+the user should tune model settings on data for which outcomes (usage) are known.
+
+```{r, eval = FALSE}
+
+## The five file types must be present for each of these days in the given range
+pred_start_date <- as.Date('2020-06-20')
+num_days <- 100
+pred_end_date <- pred_start_date + num_days
+
+## Predict using default model settings
+prediction <- db %>% 
+  sbc_predict_for_range_db(pred_start_date, num_days, config)
+
+## Build a table of predictions against the actual usage
+full_pred_table_db <- db %>%
+  build_prediction_table_db(config, pred_start_date, pred_end_date)
+
+## Now we can analyze the amount of waste, shortage, and prediction error
+full_pred_tabl_db %>% pred_table_analysis(config)
+
+## ... and also look at prominent features used during the prediction range
+db %>% build_coefficient_table_db(start_date, num_days) %>%
+          coef_table_analysis()
+
+```
+
+Note that this assumes that we have uninterrupted daily data files (CBC, Census,
+Surgery, Transfusion, and Inventory) from `pred_start_date - history_window + 1` 
+through `pred_end_date` in the specified data folder.
+
+The may wish to update model training parameters until they have improved the
+results on the chosen validation period. For a full list of tuneable model 
+training settings, please refer to the **Training Parameters** section of
+**Model Behavior and Configuration** below.
+
+```{r, eval = FALSE}
+## Examples of tuning model parameters
+
+### Restrict to more recent training data 
+set_config_param(param = "history_window", value = 70)
+
+### Change the range of CV hyperparameters L (used to restrict size of coefficients 
+### by L1 regularization).
+set_config_param(param = "l1_bounds", value = seq(from = 60, to = 0, by = -1))
+
+### Change how frequently the model is retrained on new data (every [value] days)
+set_config_param(param = "model_update_frequency", value = 4) # default is 7
+```
+
+
+### Step 5: Predicting a Single Day Given New Data
+
+The default daily routine makes the assumption that 
 - the data for day i is available early on day i + 1
 - the prediction is done on day i+1 for the purpose of ordering units,
   i.e. there is sufficient time to be able to do this as regards the logistics
-- the prediction is really for day i, rather than day i + 1.
+- the prediction is really for day i, rather than day i + 1
 
-Not paying attention to this can lead to off-by-one migranes!
+More specifically, this routine assumes that early on day i + 1, the user adds 
+the 5 data files (CBC, Census, Surgery, Transfusion, Inventory) for day i to the 
+data folder specified in `config` and makes a prediction of combined future usage 
+on day i + 1, i + 2, and i + 3. `SBCpip::predict_for_date_db` adds the data for
+the new date to the DuckDB database so that it can be used for future predictions.
 
+Note that as in the model validation case, 
+this assumes we have daily uninterrupted data files from `date_i - history_window + 1` 
+to day `date_i` included in the specified data folder.
+
+```{r, eval = FALSE}
+day_iplus1 <- "2021-01-01"
+
+## Returns a tibble with date = the current date and t_pred = number of 
+## platelets used over next three days
+result <- db %>% predict_for_date_db(config = config)
+
+## Returns a tibble with date = the specified date and t_pred = number of 
+## platelets used over next three days
+result <- db %>% predict_for_date_db(config = config, date = day_iplus1)
+```
+
+We not only want to predict usage for the next three days, but also generate
+a recommendation for number of fresh platelets to collect today (day i) so they
+will be ready for use on day i + [3]. This is computed as follows (the dashboard)
+runs this computation automatically):
+
+```{r, eval = FALSE}
+
+next_collection <- db %>% 
+      recommend_collection(config, day_iplus1, result$t_pred, 
+                           product_type = 2L, # number of days required to test new platelets before use
+                           x_plus1 = 30L,     # number of new platelets available today
+                           x_plus2 = 30L,     # number of new platelets available tomorrow
+                           r_1 = 0L,          # number of inventory platelets expiring today
+                           r_2 = 0L)          # number of inventory platelets expiring tomorrow
+
+```
+
+
+### Step 6: Making Ongoing Predictions
+The user can repeat Step 5 until the model retrains based on the value specified
+for `config$model_update_frequency` (i.e. "retrain every x days"). At certain
+points, it may be prudent to repeat Steps 3 and 4 to re-tune the model training
+parameters.
+
+## Model Behavior and Configuration
+
+### Model Description and Behavior
+On a given day *i*, the model serves to predict blood platelet usage over the following three days, i.e. y<sub>i</sub> = u<sub>i+1</sub> + u<sub>i+2</sub> + u<sub>i+3</sub>. The assumption is that the practitioner must predict on day *i* so that units can be collected and screened prior to availability on day *i+3*.
+
+Predictions are made based on the following features:
+1. A moving average of recent platelet usage
+2. A binary indicator for each day of the week
+3. Hospital features such as Complete Blood Count (CBC) results for patients, number of patients in specific locations of the hospital, and scheduled surgeries (see **`sbc_config`** and **Data Preparation** sections below).
+
+The model is trained using a linear program API (`lpSolve`). Decision variables include predictions, collections, inventory levels, waste, and shortage, in addition to coefficients. The model is a straightforward linear model, but the linear program enforces a number of additional constraints on the resulting coefficients when the model is fit. For example, coefficients must be set such that both waste and shortage generated by the model during the training period are minimized, and the model does not directly penalize for less accurate predictions. This allows the user to specify statistical bias up or down based on the costliness of wasted units vs. product shortages.
+
+The model also constrains the coefficients for hospital features (3) as a form of L1-regularization (LASSO). This constraint (*L*) is a hyperparameter that is tuned via (*n*/14)-fold cross-validation (CV), where *n* is the number of training samples. Due to the temporal arrangement of the data, each evaluation fold is not eliminated from the training set entirely, but rather the optimization problem sets all of the collection amounts during the span of the left-out fold equal to the exact number of platelets used (most efficient case) and ignores any waste and shortage generated during the span of the fold.
+
+
+### `sbc_config` 
+The configuration object, which is assigned to the environment, contains all of the parameters that are relevant to data processing and model training. Most of these are easily configurable from the Shiny Dashboard interface.
+
+#### Directory and File Parameters:
+* `data_folder`: The full path to a directory containing all pertinent data files (see **Data Preparation** below), e.g. "/Users/username/Desktop/platelet_prediction/platelet_data/".
+* `log_folder`: The full path to a directory that will contain all log files generated by the model, to track usage and any errors.
+* `database_path`: The full path to a local DuckDB database file, e.g. "/Users/username/Desktop/platelet_prediction/database.duckdb". The file will be created if it does not already exist. 
+* `cbc_filename_prefix`: The string prefix of the daily CBC (Complete Blood Count) reports used as inputs to the model. This prefix should be immediately followed by a date of the form "YYYY-MM-DD" (for example, "LAB-BB-CSRP-CBC_Daily2021-01-01...").
+* `census_filename_prefix`: The string prefix of the daily census reports used as inputs to the model. This prefix should be immediately followed by a date of the form "YYYY-MM-DD" (for example, "LAB-BB-CSRP-Census_Daily2021-01-01...").
+* `surgery_filename_prefix`: The string prefix of the daily surgery reports used as inputs to the model. This prefix should be immediately followed by a date of the form "YYYY-MM-DD" (for example, "LAB-BB-CSRP-Surgery_Daily2021-01-01...").
+* `transfusion_filename_prefix`: The string prefix of the daily blood transfusion reports used as outputs to train the model. This prefix should be immediately followed by a date of the form "YYYY-MM-DD" (for example, "LAB-BB-CSRP-Transfusion_Daily2021-01-01...").
+* `inventory_filename_prefix`: The string prefix of the daily inventory reports used as inputs to the model. This prefix should be immediately followed by a date of the form "YYYY-MM-DD" (for example, "Daily_Product_Inventory2021-01-01...").
+* `log_filename_prefix`: The string prefix of log files generated by the model when it is run.
+
+#### Model Inputs and Localization
+(For more specific details on input data files and required fields, see the *Data Preparation* section below)
+* `cbc_quantiles`: A named list of site-specific quantile functions for each CBC of interest (see **Data Preparation** section below)
+* `cbc_abnormals`: A named list of site-specific functions that flag values as abnormal or not (see **Data Preparation** section below)
+* `census_locations`: A character vector of locations of interest in the hospital
+* `surgery_services`: A character vector of types of surgeries / OR services performed at the hospital, in particular those that typically require platelet transfusions
+* `org_cbc_cols`: The columns in the target organization's CBC files that correspond to required fields.
+* `org_census_cols`: The columns in the target organization's census files that correspond to required fields.
+* `org_surgery_cols`: The columns in the target organization's census files that correspond to required fields.
+* `org_transfusion_cols`: The columns in the target organization's transfusion files that correspond to required fields.
+* `org_inventory_cols`: The columns in the target organization's inventory files that correspond to required fields.
+
+#### Training Parameters:
+* `c0`: The minimal number of fresh platelets remaining at the end of a given day. This is used in model training as a lower bound on number of inventory units expiring in 2 days, and it also serves as the minimum number of new platelets that the blood center should collect on any given day. Increasing this value adds positive bias to the model's predictions.
+* `history_window`: The number of previous days to consider as data to train the model for prediction on the next three days. This should be at least 5 times `start` (100 days is typical). Larger history windows tend to result in more conservative (greater) predictions.
+* `penalty_factor`: The excess amount which we wish to penalize shortage over waste. For example, if the cost of making up 1 short unit is equivalent to around 15 units wasted, `penalty_factor` = 15.
+* `start`: The number of days after the beginning of the model training or evaluation period when we begin to collect new platelets. The actual number of training observations is effectively equal to `history_window` - `start` - 5.
+* `initial_collection_data`: The number of blood products initially collected on days `start`, `start + 1`, and `start + 2`.  These are required to initialize model predictions because we need to plan to collect platelets on day i that will be ready for use on day i + 3, so we assume we have already set collection amounts for the first 3 days.
+* `initial_expiry_data`: The number of end of day remaining units on day `start` that expire on day `start + 1` and day `start + 2`, respectively.
+* `model_update_frequency`: How often we retrain the model (in days), e.g. 7 if we retrain weekly. Model training time depends on the number of `l1_bounds` we consider (see below) as well as the size of `history_window`.
+* `lag_window`: As the model is autoregressive (takes previous outputs as input), this controls the number of prior days over which we average usage (default 7 days).
+* `l1_bounds`: A sequence of hyperparameter values that control the weight given to the input features aside from day of the week and previous usage (via L1 regularization). A bound of 0 corresponds to no additional input features used. A vector of possible bounds from 0 to 60 is typically sufficient.
+* `lag_bounds`: While we assume previous blood product usage level is a key predictor of future usage, this allows the model to restrict the amount of weight given to this variable in favor of others (e.g. when there are abrupt changes in usage that may be caused by or at least correlate with hospital data).
+
+## Data Preparation
+
+### Data Mapping and Compatibility
+`SBCpip` relies on 5 different file types. Each of the below file types must be added to the same data folder for each observed date:
+1. **CBC:** Results of CBC (Complete Blood Count) tests on hospital patients on a given date. The goal is to identify abnormal levels in hospital patients and use these instances as inputs to the model (1 row = 1 unique measurement)
+2. **Census:** Locations of patients in the hospital system (e.g. rooms, wards) on a given date. The goal is to identify specific locations that are increasing hospital demand for specific blood products. (1 row = 1 unique patient)
+3. **Surgery:** Surgeries carried out by hospital on a given date (or scheduled to be performed in the next 3 days). The goal is to identify particular surgery types that are increasing hospital demand for specific blood products. (1 row = 1 unique operation)
+4. **Transfusion:** Transfusions that occur at the hospital on a given date. This is the response which we try to predict (transfusions over next 2 or 3 days) (1 row = 1 unique transfusion of a blood product).
+5. **Inventory:** Blood products collected and available in inventory for issue to hospital / transfusions. We use this to compare model performance to actual historical protocol (1 row = 1 unit).
+
+The information contained in each type of file will be organization-specific, so we stipulate essential columns used in data preprocessing. Each organization
+should include a table of mappings from their corresponding column headers to the following (we provide a template `inst/extdata/sbc_data_mapping.csv` that should be completed):
+
+1. **CBC:** (csv/tsv format)
+	* ORDER_PROC_ID: Unique Identifier [Character]
+	* BASE_NAME: Specific blood cell / component type. [Character]
+	* RESULT_TIME: Datetime at which the test result was obtained. [Datetime ("%d-%b-%y %H:%M:%S")]
+	* ORD_VALUE: Value obtained for the specific component as a result of the test [Character - coerced to double]
+
+2. **Census:** (.csv/.tsv format)
+	* PAT_ID: Unique Patient Identifier [Character]
+	* LOCATION_DT: Datetime at which patient was logged as present in a specific location/section of the hospital. [Datetime("%m/%d/%Y  %I:%M:%S%p")]
+	* LOCATION_NAME: Name of location where patient was present. [Character]
+
+3. **Surgery:** (.csv/.tsv format)
+	* LOG_ID: Unique identifier for set of surgical procedures [Character]
+	* SURGERY_DATE: Datetime of procedure [Datetime("%m/%d/%Y  %I:%M:%S %p”)]
+	* FIRST_SCHED_DATE: Datetime indicating when procedure was first scheduled [Datetime("%m/%d/%Y  %I:%M:%S %p”)]
+	* CASE_CLASS: Indicator of whether surgery is “Elective” or “Urgent” [Character]
+	* OR_SERVICE: Specific type of surgery to be carried out. [Character]
+
+4. **Transfusion:** (.csv/.tsv format)
+	* DIN: Donation Identification Number that uniquely identifies the transfused unit [Character]
+	* Issue Date/Time: Datetime when component is transfused to patient [Datetime("%m/%d/%Y  %I:%M:%S %p")]
+	* Type: Specific blood cell / component type being transfused. The code assumes that "PLT" is contained in the set of possible values [Character]
+
+5. **Inventory:** (.xls format)
+	* Inv. ID: Unique identifier for product in inventory [Character]
+	* Type: The specific type of transfusable product (e.g. “PLT”) [Character]
+	* Days to Expire: Number of days after which unit is considered expired [Double]
+	* Exp. Date: Specific date on which unit is set to expire [Datetime("%m/%d/%Y  %I:%M:%S %p")]
+	* Exp. Time: Specific time at which unit is set to expire [Double]
+
+### Additional CBC Data Preparation
+The CBC inputs are first summarized in terms of quantiles of the specific CBC result for each patient with respect to all patients, as well as an indicator of the number of patients with abnormal levels of certain components. Quantile functions and abnormal levels must be defined for the specific CBC components that the user would like to include as inputs to the model, and this is handled using the provided template file `inst/extdata/cbc_thresholds.csv`.
+
+For each component of interest, the user must specify the following fields in the file (for both quantiles and abnormals):
+#### Quantiles
+* `metric` = "quantile"
+* `base_name` = CBC component, e.g. "PLT"
+* `type` = "literal" (quantile is a fixed value) or "quantile" (quantile is computed based with respect to given data)
+* `value` = either the literal value for "literal" or which p-quantile is computed for "quantile" (0 < p < 1).
+
+### Abnormals
+* `metric` = "abnormal"
+* `base_name` = CBC component, e.g. "PLT"
+* `type` = "less" or "greater" depending on the direction of abnormality
+* `value` = the threshold value below ("less") or above ("greater") which we consider the level "abnormal"
+
+Note that CBC components for which a quantile and abnormal designation is not provided will be ignored as inputs to the model (a warning will be issued).
+
+
+## Database Structure
+The local DuckDB database created by the SBCpip code at the path specified by the user will contain the following tables:
+
+* `cbc`
+* `census`
+* `surgery`
+* `transfusion`
+* `inventory`
+
+Note that in order to ensure consistency between the data in each of these tables, only rows for which all 5 file types exist in the folder for a given date will be added to any table. The function `SBCpip::process_data_for_date` serves as a gatekeeper in this respect.
+
+When each prediction is made, we join rows from the 5 tables above and create rows in 2 additional tables: 
+* `model` - coefficients for each predicted day, the model’s age on that day, and the hyperparameter values selected during cross-validation
+* `pred_cache` - predictioned usage for each day
+An additional `data_scaling` table is used to store the current data scales (variance) and centers (mean) to standardize the data before it is input to the model.
 
 ## Shiny Dashboard
-
-A shiny dashboard is available for those more used to point-and-click
-interfaces, invoked via `SBCpip::sbc_dashboard()`. 
-
-
-## References
 
 
 

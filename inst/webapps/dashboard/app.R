@@ -9,21 +9,14 @@ library(DBI)
 library(duckdb)
 
 paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", package = "SBCpip"))
-data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
+data_tables <-   data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
 
-### Initialization code
+## Initialization code
 
 ## Set config parameters for relevant column headers based on provided data mapping
-set_org_col_params <- function(file_type, data_mapping) {
-  invisible(SBCpip::set_config_param(sprintf("org_%s_cols", file_type),
-                                     (data_mapping %>%
-                                        dplyr::filter(data_file == file_type))$org_data_column_name_to_edit))
-}
+SBCpip::set_org_col_params()
 
 ## Read column mappings from the sbc_data_mapping file.
-data_mapping_file <- system.file("extdata", "sbc_data_mapping.csv", package = "SBCpip")
-data_mapping <- read.csv(data_mapping_file)
-sapply(data_tables, set_org_col_params, data_mapping)
 
 ## Set config params for cbc quantiles and abnormals
 cbc_threshold_file <- system.file("extdata", "cbc_thresholds.csv", package = "SBCpip")
@@ -146,11 +139,11 @@ sidebar <- dashboardSidebar(
     , menuItem("Predict for Today", icon = icon("caret-right"), tabName = "prediction")
     , conditionalPanel(
       condition = "input.tabId == 'prediction'"
-      , dateInput(inputId = "predictDate", label = "Date (i)", value = as.character(Sys.Date()))
-      , numericInput(inputId = "collect1", label = "Units Collected Tomorrow (i + 1)", value = 0)
-      , numericInput(inputId = "collect2", label = "Units Collected in 2 Days (i + 2)", value = 0)
-      , numericInput(inputId = "expire1", label = "Remaining Units Expiring Tomorrow", value = 0)
-      , numericInput(inputId = "expire2", label = "Remaining Units Expiring in 2 Days", value = 0)
+      , dateInput(inputId = "predictDate", label = "Date (i + 1)", value = as.character(Sys.Date()))
+      , numericInput(inputId = "collect1", label = "Units Collected Today (i + 1)", value = 0)
+      , numericInput(inputId = "collect2", label = "Units Collected Tomorrow (i + 2)", value = 0)
+      , numericInput(inputId = "expire1", label = "Remaining Units Expiring Today", value = 0)
+      , numericInput(inputId = "expire2", label = "Remaining Units Expiring Tomorrow", value = 0)
       , actionButton(inputId = "predictButton", "Predict")
     )
     , menuItem("Prediction Plots", icon = icon("bar-chart-o"), tabName = "modelPlots")
@@ -429,49 +422,19 @@ server <- function(input, output, session) {
     loggit::set_logfile(paste0(input$log_folder, sprintf(input$log_filename_prefix, Sys.Date())))
     
     # Grab CBC Features
-    cbcFilename <- tail(list.files(path = config$data_folder, 
-                                   pattern = config$cbc_filename_prefix, 
-                                   full.names = TRUE), 1L)
-    
-    cbcData <- readr::read_tsv(file = cbcFilename, 
-                               col_names = TRUE, 
-                               show_col_types = FALSE)
-    
-    cbcFeatures <- unique(cbcData[[config$org_cbc_cols[2]]])
+    features <- SBCpip::set_features_from_file()
     
     shinyWidgets::updateMultiInput(session, inputId = "cbc_features", 
-                                   selected = sort(cbcFeatures),
-                                   choices = sort(cbcFeatures))
-    
-    # Grab Census Features
-    censusFilename <- tail(list.files(path = config$data_folder, 
-                                   pattern = config$census_filename_prefix, 
-                                   full.names = TRUE), 1L)
-    
-    censusData <- readr::read_tsv(file = censusFilename, 
-                               col_names = TRUE, 
-                               show_col_types = FALSE)
-    
-    censusFeatures <- unique(censusData[[config$org_census_cols[2]]])
+                                   selected = features$cbc,
+                                   choices = features$cbc)
     
     shinyWidgets::updateMultiInput(session, inputId = "census_features", 
-                                  selected = sort(censusFeatures),
-                                  choices = sort(censusFeatures))#value = paste0(sort(censusFeatures), collapse = ", "))
-    
-    # Grab Surgery Features
-    surgeryFilename <- tail(list.files(path = config$data_folder, 
-                                      pattern = config$surgery_filename_prefix, 
-                                      full.names = TRUE), 1L)
-    
-    surgeryData <- readr::read_tsv(file = surgeryFilename, 
-                                  col_names = TRUE, 
-                                  show_col_types = FALSE)
-    
-    surgeryFeatures <- unique(surgeryData[[config$org_surgery_cols[2]]])
+                                  selected = features$census,
+                                  choices = features$census)
     
     shinyWidgets::updateMultiInput(session, inputId = "surgery_features", 
-                                   selected = sort(surgeryFeatures),
-                                   choices = sort(surgeryFeatures))#value = paste0(sort(surgeryFeatures), collapse = ", "))
+                                   selected = features$surgery,
+                                   choices = features$surgery)
     
   })
   
@@ -658,7 +621,7 @@ server <- function(input, output, session) {
     inventorySummary()
   })
   
-  # Predict platelet usage for a specific date.
+  # Predict platelet usage for a single specific date.
   predictSingleDay <- eventReactive(input$predictButton, {
     opts <- options(warn = 1) ## Report warnings as they appear
     req(input$predictDate)
@@ -702,11 +665,10 @@ server <- function(input, output, session) {
     
     # We find the average platelet usage over the last [start] days in order to
     # correct for expected waste.
-    transfusion_tbl <- db %>% 
-      dplyr::tbl("transfusion") %>%
-      dplyr::collect() %>%
-      dplyr::filter(date > input$predictDate - config$start & date <= input$predictDate)
-    mean_y_recent <- as.integer(mean(as.numeric(transfusion_tbl$used)))
+    next_collection <- db %>% 
+      SBCpip::recommend_collection(config, input$predictDate, pr$t_pred, 
+                                   2L, input$collect1, input$collect2, 
+                                   input$expire1, input$expire2)
     
     DBI::dbDisconnect(db, shutdown = TRUE)
     
@@ -714,7 +676,7 @@ server <- function(input, output, session) {
     list(output_txt = sprintf("Prediction Date: %s\nPredicted Usage for Next 3 Days: %d Units\n Recommended Amount to Collect in 3 Days: %d Units\n Model retraining in: %d Days",
                               input$predictDate,
                               pr$t_pred, 
-                              max(floor(pip::pos(pr$t_pred - input$collect1 - input$collect2 - min(input$expire1, mean_y_recent) - input$expire2 + 1)), config$c0),
+                              next_collection,
                               config$model_update_frequency - model_age$age),
          coef_tbl = head(coefs, 25L))
   })
@@ -788,10 +750,12 @@ server <- function(input, output, session) {
                                                                    updateProgress = updateProgress)
         }
     
-        pred_analysis <- db %>% SBCpip::build_prediction_table_db(config, start_date, end_date, prediction_df) %>% 
+        pred_analysis <- db %>% 
+          SBCpip::build_prediction_table_db(config, start_date, end_date, prediction_df) %>% 
           SBCpip::pred_table_analysis(config)
         
-        coef_analysis <- db %>% SBCpip::build_coefficient_table_db(start_date, num_days) %>%
+        coef_analysis <- db %>% 
+          SBCpip::build_coefficient_table_db(start_date, num_days) %>%
           SBCpip::coef_table_analysis()
       
         db %>% DBI::dbDisconnect(shutdown = TRUE)
