@@ -114,6 +114,13 @@ sidebar <- dashboardSidebar(
                  , dateInput(inputId = "surgeryDateEnd", label = "End Date", value = as.character(Sys.Date()))
                  , actionButton(inputId = "surgerySummaryButton", "Summarize")
                )
+               , menuSubItem("Transfusion Summary", tabName = "transfusion")
+               , conditionalPanel(
+                 condition = "input.tabId == 'transfusion'"
+                 , dateInput(inputId = "transfusionDateStart", label = "Start Date", value = as.character(Sys.Date()))
+                 , dateInput(inputId = "transfusionDateEnd", label = "End Date", value = as.character(Sys.Date()))
+                 , actionButton(inputId = "transfusionSummaryButton", "Summarize")
+               )
                , menuSubItem("Inventory Summary", tabName = "inventory")
                , conditionalPanel(
                  condition = "input.tabId == 'inventory'"
@@ -297,6 +304,9 @@ body <- dashboardBody(
               , h2("Surgery Summary")
               , tableOutput("surgerySummary")
     )
+    , tabItem(tabName = "transfusion"
+              , h2("Transfusion Summary")
+              , tableOutput("transfusionSummary"))
     , tabItem(tabName = "inventory"
               , h2("Inventory Summary")
               , tableOutput("inventorySummary")
@@ -602,6 +612,22 @@ server <- function(input, output, session) {
   })
   output$surgerySummary <- renderTable({
     surgerySummary()
+  })
+  
+  # Summarize Transfusion data for a specific date. Assumes that db has table named transfusion
+  transfusionSummary <- eventReactive(input$transfusionSummaryButton, {
+    req(input$transfusionDateStart)
+    req(input$transfusionDateEnd)
+    
+    config <- SBCpip::get_SBC_config()
+    
+    fetch_data_for_dates(input$transfusionDateStart, 
+                         input$transfusionDateEnd, 
+                         "transfusion",
+                         config$database_path)
+  })
+  output$transfusionSummary <- renderTable({
+    transfusionSummary()
   })
   
   # Summarize Inventory data for a specific date. Assumes that db has table named surgery
