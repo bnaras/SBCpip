@@ -51,7 +51,7 @@ SBC_config <- function() {
         penalty_factor = 15,   ## penalty factor to use in training
         prediction_bias = 10,    ## inventory count below which we penalize result 
         start = 10, ## the day we start the model evaluation
-        initial_collection_data = c(40, 40, 40), ## the initial number that will be collected for the first three days
+        initial_collection_data = c(60, 60, 60), ## the initial number that will be collected for the first three days
         initial_expiry_data = c(0, 0), ## the number of units that expire a day after, and two days after respectively
         data_folder = "E:/platelet_predict_daily_data", ## Shared folder for Blood Center
         database_path =  "E:/database.duckdb", 

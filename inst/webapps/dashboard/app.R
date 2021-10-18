@@ -7,6 +7,7 @@ library(gridExtra)
 library(bibtex)
 library(DBI)
 library(duckdb)
+library(scales)
 
 paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", package = "SBCpip"))
 data_tables <-   data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
@@ -211,7 +212,12 @@ body <- dashboardBody(
                 )
                 , box(
                   h3("Feature Names")
-                  , actionButton(inputId = "refreshFeatures", label = "Refresh Features")
+                  , fluidRow(align = "center"
+                    , actionButton(inputId = "refreshFeaturesButton", label = "Refresh Features")
+                    , actionButton(inputId = "saveFeaturesButton", label = "Save Features")
+                    , actionButton(inputId = "loadFeaturesButton", label = "Load Features")
+                    , br()
+                  )
                   , shinyWidgets::multiInput(inputId = "cbc_features", 
                                              label = "CBC Features List", 
                                              choices = SBCpip::get_SBC_config()$cbc_vars, 
@@ -401,7 +407,8 @@ server <- function(input, output, session) {
   parse_vars <- function(v) unlist(lapply(strsplit(as.character(v), split = ","), trimws))
   
   all_active_features <- reactive({
-    fixed_features <- c("intercept", "lag", "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+    fixed_features <- c("intercept", "lag", 
+                        "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
     all_active_features <- c(fixed_features, 
                              sapply(parse_vars(input$cbc_features), function(x) paste0(x, "_Nq")),
                              parse_vars(input$census_features),
@@ -413,8 +420,7 @@ server <- function(input, output, session) {
     stopApp(TRUE)
   })
   
-  # Refresh possible features to choose from based on available data files
-  observeEvent(input$refreshFeatures, {
+  set_path_params <- reactive({
     # Folder names
     SBCpip::set_config_param("data_folder", input$data_folder)
     SBCpip::set_config_param("log_folder", input$log_folder)
@@ -427,10 +433,15 @@ server <- function(input, output, session) {
     SBCpip::set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
     SBCpip::set_config_param("log_filename_prefix", input$log_filename_prefix)
     
-    config <- SBCpip::get_SBC_config()
-    
+    # log_folder
     loggit::set_logfile(paste0(input$log_folder, sprintf(input$log_filename_prefix, Sys.Date())))
+  })
+  
+  # Refresh possible features to choose from based on available data files
+  observeEvent(input$refreshFeaturesButton, {
     
+    set_path_params()
+
     # Grab CBC Features
     features <- SBCpip::set_features_from_file()
     
@@ -448,20 +459,59 @@ server <- function(input, output, session) {
     
   })
   
+  observeEvent(input$saveFeaturesButton, {
+    
+    set_path_params()
+    
+    cbc <- input$cbc_features
+    census <- input$census_features
+    surgery <- input$surgery_features
+    
+    feat_list <- list(cbc = cbc, census = census, surgery = surgery)
+    
+    config <- SBCpip::get_SBC_config()
+    
+    result <- tryCatch(saveRDS(feat_list, file = file.path(config$data_folder, "features.rds")),
+             error = function(e) {
+               message(e)
+             })
+    if (!is.null(result)) {
+      shinyalert::shinyalert("Oops!", result)
+    } else { 
+      shinyalert::shinyalert("Success!", "Saved New Default Features.")
+    }
+  })
+  
+  observeEvent(input$loadFeaturesButton, {
+    # Grab CBC Features
+    config <- SBCpip::get_SBC_config()
+    result <- NULL
+    features <- tryCatch(readRDS(file = file.path(config$data_folder, "features.rds")),
+                         warning = function(e) {
+                           shinyalert::shinyalert("Oops!", "Loading failed. Make sure you have saved features first.")
+                           return()
+                         })
+    
+    shinyWidgets::updateMultiInput(session, inputId = "cbc_features", 
+                                   selected = features$cbc,
+                                   choices = union(features$cbc, input$cbc_features))
+    
+    shinyWidgets::updateMultiInput(session, inputId = "census_features", 
+                                   selected = features$census,
+                                   choices = union(features$census, input$census_features))
+    
+    shinyWidgets::updateMultiInput(session, inputId = "surgery_features", 
+                                   selected = features$surgery,
+                                   choices = union(features$surgery, input$surgery_features))
+    
+  })
+  
   # Set the database build configurations
   observeEvent(input$setDBValues, {
-    # Folder names
-    SBCpip::set_config_param("data_folder", input$data_folder)
-    SBCpip::set_config_param("log_folder", input$log_folder)
     
-    # File prefixes
-    SBCpip::set_config_param("cbc_filename_prefix", input$cbc_filename_prefix)
-    SBCpip::set_config_param("census_filename_prefix", input$census_filename_prefix)
-    SBCpip::set_config_param("surgery_filename_prefix", input$surgery_filename_prefix)
-    SBCpip::set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
-    SBCpip::set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
+    set_path_params()
     
-    # Variables (eventually would like some kind of picklist setup instead of free text)
+    # Variables
     cbc_feature_vector <- input$cbc_features
     cbc_q <- lapply(cbc_feature_vector, cbc_quantile_to_function, cbc_quantiles_tbl)
     names(cbc_q) <- cbc_feature_vector
@@ -479,8 +529,6 @@ server <- function(input, output, session) {
     SBCpip::set_config_param("census_locations", input$census_features)
     SBCpip::set_config_param("surgery_services", input$surgery_features)
     SBCpip::set_config_param("database_path", input$database_path)
-    
-    loggit::set_logfile(paste0(input$log_folder, sprintf(input$log_filename_prefix, Sys.Date())))
     
     # Update the coefficients 
     shinyWidgets::updateMultiInput(session, 
@@ -720,12 +768,24 @@ server <- function(input, output, session) {
     input$endDate
   })
   
+  validating <- reactiveVal(FALSE)
+  
+  observeEvent(input$predictionSummaryButton, {
+    validating(TRUE)
+  })
+  
   # Generate prediction table for a range of dates.
   observe({
     btns <- c("predictionSummaryButton", "standaloneSummaryButton")
     lapply(btns, function(x) {   
       observeEvent(input[[x]], {
+        
+        if (!input$setDBValues | !input$setModelValues) 
+          shinyalert::shinyalert("Oops!", "Make sure to apply the Database Settings and Model Settings first.")
+        
         opts <- options(warn = 1) ## Report warnings as they appear
+        req(input$setDBValues)
+        req(input$setModelValues)
         req(input$startDate)
         req(input$endDate)
         
@@ -740,65 +800,102 @@ server <- function(input, output, session) {
         db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
         on.exit({
           if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
+          validating(FALSE)
         }, add = TRUE)
         
         if (sum(data_tables %in% DBI::dbListTables(db)) != length(data_tables)) {
-          return("Data tables are not available in database. 
-                   Make sure to run 'Database Settings' >> 'Reset Database' first.")
+          output$predAnalysis <- renderTable({
+            "Data tables are not available in database. 
+                   Please run 'Database Settings' >> 'Reset Database'."
+            }, colnames = FALSE)
+          return()
+        }
+        
+        # Check to make sure all transfusion data is included in the range we are trying to predict
+        # There's no particular reason tranfusion is used here as opposed to any other table
+        transfusion_tbl <- db %>% dplyr::tbl("transfusion") %>% dplyr::collect()
+        
+        all_dates <- seq.Date(start_date, end_date, by = 1L)
+        missing_dates <- all_dates[!(all_dates %in% transfusion_tbl$date)]
+        
+        if (length(missing_dates) > 0L) {
+          output$predAnalysis <- renderTable({
+            "Data for some or all of the selected dates are missing in the database."
+          }, colnames = FALSE)
+          return()
         }
     
         prediction_df <- NULL
     
-        ## Only run model validation if the correct button is pressed
-        if (input$predictionSummaryButton) {
+        ## Only run model validation if the correct button is clicked
+        if (validating()) {
           # Initialize shiny progress bar
           progress <- shiny::Progress$new()
           progress$set(message = "Model Validation Progress", value = 0)
-          on.exit(progress$close())
+          on.exit(progress$close(), add = TRUE)
     
           # Callback function to update progress
           updateProgress <- function(detail = NULL) {
             progress$inc(amount = 1/num_days, detail = detail)
           }
-
-          # Check to make sure all transfusion data is included in the range we are trying to predict
-          # There's no particular reason tranfusion is used here as opposed to any other table
-          transfusion_tbl <- db %>% dplyr::tbl("transfusion") %>% dplyr::collect()
-    
-          all_dates <- seq.Date(start_date, end_date, by = 1L)
-          missing_dates <- all_dates[!(all_dates %in% transfusion_tbl$date)]
-
-          if (length(missing_dates) > 0L) return("Data for some or all of the selected dates are missing in the database.")
     
           # Predict range that needs to be predicted
-          prediction_df <- db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config, 
-                                                                   updateProgress = updateProgress)
+          prediction_df <- tryCatch(db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config, 
+                                                                   updateProgress = updateProgress),
+                                    error = function(e) {
+                                      output$predAnalysis <- renderTable({
+                                        message(e)
+                                        }, colnames = FALSE)
+                                      return()
+                                    })
+          
+          validating(FALSE)
         }
     
-        pred_analysis <- db %>% 
+        pred_analysis <- tryCatch(db %>% 
           SBCpip::build_prediction_table_db(config, start_date, end_date, prediction_df) %>% 
-          SBCpip::pred_table_analysis(config)
+          SBCpip::pred_table_analysis(config),
+          error = function(e) {
+            output$predAnalysis <- renderTable({
+              message(e)
+              }, colnames = FALSE)
+            return()
+          })
         
-        coef_analysis <- db %>% 
+        coef_analysis <- tryCatch(db %>% 
           SBCpip::build_coefficient_table_db(start_date, num_days) %>%
-          SBCpip::coef_table_analysis()
+          SBCpip::coef_table_analysis(),
+          error = function(e) {
+            output$predAnalysis <- renderTable({
+              message(e)
+              }, colnames = FALSE)
+            return()
+          })
       
         db %>% DBI::dbDisconnect(shutdown = TRUE)
     
         # Output both the prediction and coefficient analyses
-        pred_analysis_items <- c("Prediction Started", "Prediction Ended", "Number of Days", "Total Model Waste",
-                                 "Total Model Short", "Total Actual Waste", "Total Actual Short", "Loss from Table", "Real Loss",
+        pred_analysis_items <- c("Prediction Started", "Prediction Ended", 
+                                 "Number of Days", "Total Model Waste",
+                                 "Total Model Short", "Total Actual Waste", 
+                                 "Loss from Table", "Real Loss",
                                  "Overall RMSE", "Positive RMSE", "Negative RMSE", 
-                                 "Sun RMSE", "Mon RMSE", "Tue RMSE", "Wed RMSE", "Thu RMSE", "Fri RMSE", "Sat RMSE")
+                                 "Sun RMSE", "Mon RMSE", "Tue RMSE", "Wed RMSE", 
+                                 "Thu RMSE", "Fri RMSE", "Sat RMSE")
+        
         output$predAnalysis <- renderTable({
           unlist(pred_analysis) %>% 
             as.data.frame() %>%
-            `rownames<-`(pred_analysis_items)}, rownames = TRUE)
+            `rownames<-`(pred_analysis_items) %>%
+            `colnames<-`("Stats")
+          }, rownames = TRUE)
         
         output$coefAnalysis<- renderTable({
           coef_analysis %>%
-            `$`(other) 
-        }, rownames = TRUE)
+            `$`(other) %>%
+            dplyr::filter(.data$feat != "l1_bound") %>%
+            rbind(coef_analysis$dow)
+          }, rownames = TRUE)
       })
     })
   })
@@ -825,33 +922,52 @@ server <- function(input, output, session) {
     # Actual vs. predicted usage for the next 3 days
     p1 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Three-day actual usage`, col = "Actual Usage")) +
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Three-day prediction`, col = "Predicted Usage"))
-    ggplot2::labs(x = "Actual and Estimated 3-Day Usage", y = "Units") +
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Three-day prediction`, col = "Predicted Usage")) +
+      ggplot2::labs(x = "Date", y = "Units") +
+      ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
       ggplot2::theme(legend.position = "bottom")
     
     # The recommended number of units to collect per the prediction
     p2 <- ggplot2::ggplot(data = d) +
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `No. to collect per prediction`, col = "Collection"))
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `No. to collect per prediction`, col = "Rec Collection")) +
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Fresh Units Collected`, col = "True Collection ")) +
+      ggplot2::labs(x = "Date", y = "Units") +
+      ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
+      ggplot2::theme(legend.position = "bottom")
 
     # Waste generated by model predictions vs. truth (with inventory expiring in 1 day)
     p3 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = Waste, col = "Waste")) + 
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 1 day`, col = "Expiring in 1 Day"))
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 1 day`, col = "Expiring in 1 Day")) + 
+      ggplot2::labs(x = "Date", y = "Units") +
+      ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
+      ggplot2::theme(legend.position = "bottom")
     
     # Shortage generated by model prediction vs. truth (with inventory expiring in 2 days)
     p4 <- ggplot2::ggplot(data = d) + 
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = Shortage, col = "Shortage")) + 
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 2 days`, col = "Expiring in 2 Days"))
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 2 days` + `Adj. no. expiring in 1 day`, 
+                                                col = "Inventory Count")) + 
+      ggplot2::labs(x = "Date", y = "Units") +
+      ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
+      ggplot2::theme(legend.position = "bottom")
     
     # The actual waste generated per true protocol
     p5 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `True Waste`, col = "True Waste")) + 
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Inv. expiring in 1 day`, col = "Inv. expiring in 1 day"))
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Inv. expiring in 1 day`, 
+                                                col = "Inv. expiring in 1 day")) +
+      ggplot2::labs(x = "Date", y = "Units") +
+      ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
+      ggplot2::theme(legend.position = "bottom")
     
     # The actual shortage generated per true protocol
     p6 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `True Shortage`, col = "True Shortage")) + 
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Inv. expiring in 2 days`, col = "Inv. expiring in 2 days"))
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Inv. count`, col = "True Inventory Count")) + 
+      ggplot2::labs(x = "Date", y = "Units") +
+      ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
+      ggplot2::theme(legend.position = "bottom")
 
     gridExtra::grid.arrange(grobs = lapply(list(p1, p2, p3, p4, p5, p6), ggplot2::ggplotGrob),
                             layout_matrix = matrix(c(1,3,5,2,4,6), nrow = 3))
@@ -885,9 +1001,11 @@ server <- function(input, output, session) {
     # Number of units expiring in 1 day (4) + number expiring in 2 days (5)
     p1 <- coef_table %>% 
       tidyr::pivot_longer(cols = -date) %>% # pivot longer so we can plot in groups
-      dplyr::filter(name %in% c(input$coefList, "l1_bound")) %>% # restrict to coefficients in the specified list
+      dplyr::filter(name %in% c(input$coefList)) %>% # restrict to coefficients in the specified list
       ggplot2::ggplot() +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = value, group = name, color = name))
+    p1 <- p1 + geom_line(mapping = ggplot2::aes(x = date, y = l1_bound, size = 2, color = "Coefficient Bound"), 
+                         data = coef_table)
     
     p1
   })

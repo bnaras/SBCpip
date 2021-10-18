@@ -270,8 +270,7 @@ build_prediction_table_db <- function(conn,
   pred_mat[index, "r1"] <- pred_mat[index, "r1_adj"] <- pip::pos(initial_expiry_data[1] + initial_expiry_data[2] - y[index] - pred_mat[index, "w"])
   pred_mat[index, "s"] <- pred_mat[index, "s_adj"] <- pip::pos(y[1] - initial_expiry_data[1] - initial_expiry_data[2] - pred_mat[index, "x"])
   pred_mat[index, "r2"] <- pred_mat[index, "r2_adj"] <- pip::pos(pred_mat[1, "x"] - pip::pos(y[1]- initial_expiry_data[1] - initial_expiry_data[2]))
-  pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- max(floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - min(pred_mat[index, "r1"], yma[index]) - pred_mat[index, "r2"] + 1)),
-                                                                  config$c0)
+  pred_mat[index + 3, "x"] <- pred_mat[index + 3, "x_adj"] <- floor(pip::pos(t_pred[index] - pred_mat[index + 1, "x"] - pred_mat[index + 2, "x"] - min(pred_mat[index, "r1"], yma[index]) - pred_mat[index, "r2"] + 1))
   
   for (i in seq.int(index + 1L, N)) {
     # These are the constraint parameters without adjusting for the minimum inventory
@@ -279,8 +278,8 @@ build_prediction_table_db <- function(conn,
     pred_mat[i, "r1"] <- pip::pos(pred_mat[i - 1, "r1"] + pred_mat[i - 1, "r2"] - y[i] - pred_mat[i, "w"])
     pred_mat[i, "s"] <- pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"] - pred_mat[i, "x"])
     pred_mat[i, "r2"] <- pip::pos(pred_mat[i, "x"] - pip::pos(y[i] - pred_mat[i - 1, "r1"] - pred_mat[i - 1, "r2"]))
-    pred_mat[i+3, "x"] <- max(floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - min(pred_mat[i, "r1"], yma[i]) - pred_mat[i, "r2"] + 1)), 
-                                config$c0)
+    pred_mat[i+3, "x"] <- floor(pip::pos(t_pred[i] - pred_mat[i + 1, "x"] - pred_mat[i + 2, "x"] - min(pred_mat[i, "r1"], yma[i]) - pred_mat[i, "r2"] + 1))
+                                
     
     # This set ensures that we have collected not only enough to satisfy our prediction, but
     # also enough to replenish to our minimum inventory.
@@ -288,9 +287,8 @@ build_prediction_table_db <- function(conn,
     pred_mat[i, "r1_adj"] <- pip::pos(pred_mat[i - 1, "r1_adj"] + pred_mat[i - 1, "r2_adj"] - y[i] - pred_mat[i, "w_adj"])
     pred_mat[i, "s_adj"] <- pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"] - pred_mat[i, "x_adj"])
     pred_mat[i, "r2_adj"] <- pip::pos(pred_mat[i, "x_adj"] - pip::pos(y[i] - pred_mat[i - 1, "r1_adj"] - pred_mat[i - 1, "r2_adj"]))
-    pred_mat[i+3,"x_adj"] <- max(floor(pip::pos(t_pred[i] + pip::pos(min_inventory - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i,"r2_adj"]) 
-                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i, "r2_adj"])),
-                                 config$c0)
+    pred_mat[i+3,"x_adj"] <- floor(pip::pos(t_pred[i] + pip::pos(min_inventory - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i,"r2_adj"]) 
+                                                - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i, "r2_adj"]))
   }
   
   pred_mat[, "Alert"] <- (pred_mat[, "r1"] + pred_mat[, "r2"] <= min_inventory)
@@ -372,6 +370,35 @@ build_coefficient_table_db <- function(conn, pred_start_date, num_days) {
   model_tbl
 }
 
+#' Compute the Proxy Loss
+#'
+#' Since we cannot observe shortage, or the true predicted response, the proxy 
+#' shortage refers to the total number of inventory platelets below c0
+#'
+#' @param w a vector of waste determined by pip::compute_prediction_statistics
+#' @param r1 a vector of remaining inventory determined by pip::compute_prediction_statistics
+#' @param r2 a vector of remaining inventory determined by pip::compute_prediction_statistics
+#' @param s a vector of shortage determined by pip::compute_prediction_statistics
+#' @param penalty_factor factor to additionally penalize shortage terms over waste
+#' @param c0 the minimum inventory level below which we penalize.
+#' @return a vector of losses computed for each hyperparameter
+#' @importFrom dplyr lead
+#' @importFrom pip pos
+compute_proxy_loss <- function(w, r1, r2, s, penalty_factor, c0) {
+  
+  if (nrow(w) != nrow(r1) || nrow(w) != nrow(r2)) {
+    stop("Waste, inventory, and/or shortage vectors of different lengths.")
+  }
+  
+  waste_loss <- apply(w, 2, function(x) sum(x)) # total waste
+  inv_loss <- apply(r1 + r2, 2, function(x) sum(pip::pos(c0 - x))) # total shortage
+  short_loss <- apply(s, 2, function(x) sum(x))
+  
+  loss <- (waste_loss + penalty_factor * (short_loss + inv_loss)) / nrow(w)
+  loss
+}
+
+
 #%%%%%%%%%%%%%%%%% Prediction Table Analysis Wrapper Functions %%%%%%%%%%%%%%%%%
 #' Compute the loss value on a validation or test dataset from the original
 #' and adjusted waste and inventory levels based on model projections.
@@ -393,16 +420,14 @@ projection_loss <- function(pred_table, config) {
   last_day <- nrow(pred_table) - 3L
   pred_table_trunc <- pred_table[seq(first_day, last_day), , drop = FALSE]
   
-  loss <- pip::compute_loss(preds = matrix(pred_table_trunc$`Three-day prediction`, ncol = 1), 
-                            y = pred_table$`Platelet usage`[seq(first_day, nrow(pred_table))],
-                            w = matrix(pred_table_trunc$Waste, ncol = 1),
-                            r1 = matrix(pred_table_trunc$`No. expiring in 1 day`, ncol = 1),
-                            r2 = matrix(pred_table_trunc$`No. expiring in 2 days`, ncol = 1),
-                            s = matrix(pred_table_trunc$Shortage, ncol = 1),
-                            penalty_factor = config$penalty_factor,
-                            rss_bias = config$prediction_bias)
+  loss <- compute_proxy_loss(w = matrix(pred_table_trunc$Waste, ncol = 1),
+                             r1 = matrix(pred_table_trunc$`No. expiring in 1 day`, ncol = 1),
+                             r2 = matrix(pred_table_trunc$`No. expiring in 2 days`, ncol = 1),
+                             s = matrix(pred_table_trunc$Shortage, ncol = 1),
+                             penalty_factor = config$penalty_factor,
+                             c0 = config$c0)
   
-  list(`Avg. Daily Loss` = loss)
+  list(`Avg. Daily Loss` = signif(loss, 5))
   
 }
 
@@ -429,16 +454,14 @@ real_loss <- function(pred_table, config) {
     pred_table_trunc$`Platelet usage`
   
   
-  loss <- pip::compute_loss(preds = matrix(pred_table_trunc$`Three-day actual usage`, ncol = 1), 
-                            y = pred_table$`Platelet usage`[seq(first_day, nrow(pred_table))],
-                            w = matrix(pred_table_trunc$`True Waste`, ncol = 1),
-                            r1 = matrix(remaining_inventory, ncol = 1),
-                            r2 = matrix(remaining_inventory, ncol = 1), # This is incorrect. Need to break up remaining_inventory
-                            s = matrix(pred_table_trunc$`True Shortage`, ncol = 1),
-                            penalty_factor = config$penalty_factor,
-                            rss_bias = config$prediction_bias)
+  loss <- compute_proxy_loss(w = matrix(pred_table_trunc$`True Waste`, ncol = 1),
+                             r1 = matrix(remaining_inventory, ncol = 1),
+                             r2 = matrix(remaining_inventory, ncol = 1), 
+                             s = matrix(pred_table_trunc$`True Shortage`, ncol = 1),
+                             penalty_factor = config$penalty_factor,
+                             c0 = config$c0)
   
-  list(`Real Avg. Daily Loss` = loss)
+  list(`Real Avg. Daily Loss` = signif(loss, 5))
   
 }
 
@@ -476,15 +499,20 @@ prediction_error <- function(pred_table, config) {
   neg_err <- sum(errs[pred_table_trunc$`Three-day actual usage` > pred_table_trunc$`Three-day prediction`])
   tot_err <- pos_err + neg_err
   
-  prediction_error[["Overall"]] <- sqrt(tot_err / nrow(pred_table_trunc))
-  prediction_error[["Pos."]] <- if (pos_err > 0) sqrt(pos_err / sum(pred_table_trunc$`Three-day actual usage` < pred_table_trunc$`Three-day prediction`)) else 0
-  prediction_error[["Neg."]] <- if (neg_err > 0) sqrt(neg_err / sum(pred_table_trunc$`Three-day actual usage` > pred_table_trunc$`Three-day prediction`)) else 0
+  prediction_error[["Overall"]] <- signif(sqrt(tot_err / nrow(pred_table_trunc)), 5)
+  prediction_error[["Pos."]] <- if (pos_err > 0) {
+    signif(sqrt(pos_err / sum(pred_table_trunc$`Three-day actual usage` < pred_table_trunc$`Three-day prediction`)), 5)
+  } else 0
+  prediction_error[["Neg."]] <- if (neg_err > 0) {
+    signif(sqrt(neg_err / sum(pred_table_trunc$`Three-day actual usage` > pred_table_trunc$`Three-day prediction`)), 5)
+  } else 0
   
   # RMSE by Day of Week
   for (dow in c("Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday")) {
     pred_table_weekly <- pred_table_trunc %>% dplyr::filter(weekdays(date) == dow)
     n <- nrow(pred_table_weekly)
-    pred_rmse <- sqrt(sum((pred_table_weekly$`Three-day actual usage` - pred_table_weekly$`Three-day prediction`)^2) / n)
+    pred_rmse <- signif(sqrt(sum((pred_table_weekly$`Three-day actual usage` - 
+                                   pred_table_weekly$`Three-day prediction`)^2) / n), 5)
     prediction_error[[dow]] <- pred_rmse
   }
   
@@ -508,7 +536,6 @@ pred_table_analysis <- function(pred_table, config) {
        total_model_waste = sum(pred_table$Waste[-c(initial_mask, final_mask)]),
        total_model_short = sum(pred_table$Shortage[-c(initial_mask, final_mask)]),
        total_real_waste = sum(pred_table$`True Waste`[-c(initial_mask, final_mask)]),
-       total_real_short = sum(pred_table$`True Shortage`[-c(initial_mask, final_mask)]),
        proj_loss = projection_loss(pred_table, config),
        real_loss = real_loss(pred_table, config),
        three_day_pred_rmse = prediction_error(pred_table, config))
@@ -586,5 +613,5 @@ recommend_collection <- function(conn, config, date, pred, product_type = 2L,
   x_2 <- x_plus2
   if (product_type != 2) x2 <- 0 
   
-  max(floor(pip::pos(pred - x_plus1 - x_2 - min(r_1, mean_y_recent) - r_2 + 1)), config$c0)
+  floor(pip::pos(pred - x_plus1 - x_2 - min(r_1, mean_y_recent) - r_2 + 1))
 }

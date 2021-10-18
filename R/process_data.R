@@ -760,7 +760,7 @@ add_days_of_week_columns <- function(smoothed_cbc_features) {
 #' @param transfusion the transfusion data
 #' @return a single tibble that contains the response, features and date (1st col)
 #' @importFrom magrittr %>%
-#' @importFrom dplyr inner_join mutate select rename
+#' @importFrom dplyr inner_join mutate select rename lag
 #' @importFrom tidyselect ends_with starts_with
 #' @importFrom tidyr spread replace_na
 #' @importFrom rlang quo !!
@@ -1404,6 +1404,7 @@ predict_for_date_db <- function(conn, config,
     
     ## Step 1. Process data for the new date
     result <- process_data_for_date(config = config, date = date) # from a file
+    
     db_tablenames <- DBI::dbListTables(conn)
     if (length(intersect(names(result), db_tablenames)) != length(names(result))) {
         stop("Mismatch between new data sources and existing sources in DB.")
@@ -1425,7 +1426,8 @@ predict_for_date_db <- function(conn, config,
     # Step 3. Define all variables based on current config (this allows mismatch between database columns and config)
     cbc_names <- unname(sapply(config$cbc_vars, function(x) paste0(x, "_Nq")))
     all_hosp_vars <- c(cbc_names, config$census_locations, config$surgery_services)
-    all_vars <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag", all_hosp_vars)
+    all_vars <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag", 
+                  all_hosp_vars)
     all_cols <- c("date", all_vars, "plt_used")
     
     # Step 4. Load required data from database and "upsert" the new rows for each table
@@ -1438,11 +1440,17 @@ predict_for_date_db <- function(conn, config,
     first_day_test <- as.Date(prev_day) # Day i 
     
     for (i in seq_along(result)) {
-        
+
         table_name <- names(updated_data)[i]
         db_table <- conn %>% 
             dplyr::tbl(table_name) %>% 
             dplyr::collect()
+        
+        if (nrow(db_table) < config$history_window + config$lag_window) {
+            stop(sprintf("Not enough dates in the database! Expected at least %d but got %d", 
+                         config$history_window + config$lag_window,
+                         nrow(db_table)))
+        }
         
         new_vars <- names(result[[table_name]])
         db_vars <- names(db_table)
