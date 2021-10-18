@@ -135,9 +135,9 @@ set_config_param(param = "census_filename_prefix", # patient location data
 set_config_param(param = "surgery_filename_prefix", # surgeries performed
                  value = "surgery_prefix")
 set_config_param(param = "transfusion_filename_prefix", # actual blood product usage 
-                 value = "census_prefix")
+                 value = "transfusion_prefix")
 set_config_param(param = "inventory_filename_prefix", # actual inventory levels
-                 value = "census_prefix")
+                 value = "inventory_prefix")
 ## Note that you only need to return the global config once. Successive calls to 
 ## set_config_param will update the value of the initial config object.
 ```
@@ -167,9 +167,11 @@ set_features_from_file()
 
 ```
 
-Now we are ready to build the local DuckDB seed database. First, specify the 
-path of the DuckDB database file to the `config` object. Then, we are ready to 
-build the full database based on all available data files
+Now we are ready to build the local seed database. First, specify the 
+path of the database file to the `config` object. Then, we are ready to 
+build the full database based on all available data files. Note that
+the database need not be a DuckDB database (may be RSQLite, etc.), but
+the Shiny Dashboard uses DuckDB.
 
 ```{r, eval = FALSE}
 library(DBI)
@@ -246,7 +248,7 @@ Note that this assumes that we have uninterrupted daily data files (CBC, Census,
 Surgery, Transfusion, and Inventory) from `pred_start_date - history_window + 1` 
 through `pred_end_date` in the specified data folder.
 
-The may wish to update model training parameters until they have improved the
+The user may wish to update model training parameters until they have improved the
 results on the chosen validation period. For a full list of tuneable model 
 training settings, please refer to the "Training Parameters" section of
 "Model Behavior and Configuration".
@@ -498,7 +500,9 @@ step before running the dashboard):
 1. **Database Settings**: Specify the local paths to the data folder, the log folder,
 and the database file, as well as filename prefixes for each type of data file and
 the desired variables. The user can also dynamically refresh the list of variables based on 
-the data files provided. They can then build the database using these settings [Step 2 in **How to use this package** above].
+the data files provided. The panel also offers the option to save and load default feature-sets to
+avoid refreshing and re-filtering for relevant features. The user can then build the database using these settings 
+[Step 2 in **How to use this package** above].
 2. **Reports**: Once the database is built, allows the user to summarize the data 
 files by the specified variables for a single date or across a range of dates (mean value and
 standard deviation for each variable). This is helpful for ensuring that the variables
@@ -541,8 +545,11 @@ which can correspond to either predictions made over a range of dates in Part 4 
   
 7. **Coefficient Plots**: For a given range of dates with predictions, the user 
 can select coefficients from a picklist, and the dashboard will plot their evolution over time.
-They are plotted against `l1_bound`, which is the constraint on the absolute value of the sum
-of the coefficients (this ensures a sparse model by L1 regularization).
+They are plotted against `Coefficient L1 Bound`, which is the constraint on the absolute value of the sum
+of the coefficients (this ensures a sparse model by L1 regularization). 
+
+The Dashboard interface includes annotations regarding the effect of changing the 
+model training parameters, as well as more fine-grained usage instructions.
 
 
 \pagebreak

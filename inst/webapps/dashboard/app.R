@@ -194,9 +194,14 @@ body <- dashboardBody(
             , p(paper_citation$abstract)
     )
     , tabItem(tabName = "data_settings"
+              , h2("Database Settings")
+              , h5("Once you have updated sbc_data_mapping.csv and cbc_thresholds.csv, and set your
+                    Input and Output locations and Filename Patterns, click \"Refresh Features\" to
+                    grab a list of features from each data file. Then select the features you would like
+                    to use and click \"Save Features\" to preserve these for future use. If you have already
+                    done these steps, click \"Load Features\" to set the previously saved feature set.")
               , fluidRow(
-                h2("Database Settings")
-                , box(
+                box(
                   h3("Input and Output Locations")
                   , textInput(inputId = "database_path", label = "Database Path", value = "/Users/kaiokada/Desktop/Research/pip.duckdb")
                   , textInput(inputId = "data_folder", label = "Data Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_inc/")
@@ -221,37 +226,66 @@ body <- dashboardBody(
                   , shinyWidgets::multiInput(inputId = "cbc_features", 
                                              label = "CBC Features List", 
                                              choices = SBCpip::get_SBC_config()$cbc_vars, 
-                                             selected = SBCpip::get_SBC_config()$cbc_vars) #value = paste0(SBCpip::get_SBC_config()$cbc_vars, collapse = ", "))
+                                             selected = SBCpip::get_SBC_config()$cbc_vars)
                   , shinyWidgets::multiInput(inputId = "census_features", 
                                              label = "Census Features List", 
                                              choices = SBCpip::get_SBC_config()$census_locations,
                                              selected = SBCpip::get_SBC_config()$census_locations)
-                                             #value = paste0(SBCpip::get_SBC_config()$census_locations, collapse = ", "))
                   , shinyWidgets::multiInput(inputId = "surgery_features", 
                                              label = "Surgery Features List", 
                                              choices = SBCpip::get_SBC_config()$surgery_services,
                                              selected = SBCpip::get_SBC_config()$surgery_services)
-                                             #value = paste0(SBCpip::get_SBC_config()$surgery_services, collapse = ", "))
                 )
               )
     )
     , tabItem(tabName = "model_settings"
               , fluidRow(
                 h2("Configuration Settings")
+                , HTML("<ul>
+                    <li><strong>Minimum Remaining Fresh Units at EOD [<em>c0</em>]:</strong> Ensures that hospital inventory 
+                      levels remain reasonably high at the end of the day. Raising this value will
+                      bias the model's predictions upward.</li>
+                    <li><strong>Prediction Error Bias [<em>b</em>]:</strong> This positive bias allows selection of
+                      model hyperparameters that avoid negative prediction errors, which typically result in shortage. 
+                      This value should be similar to c0 above.</li>
+                    <li><strong>Shortage Penalty Factor [<em>pi</em>]:</strong> How much we prioritize eliminating shortage
+                      over minimizing wastage. Impact tends to be lower than that of c0 and b, but it
+                      should be kept high to avoid shortage where possible.</li>
+                    <li><strong>History Window:</strong> The number of previous days we consider in retraining the model. We
+                      ignore the first [Skip Initial] + 5 days in the window during training time. Larger history windows will tend
+                      to produce more conservative / higher usage predictions and can lead to increased waste, and smaller
+                      windows will tend to reduce waste but increase the risk of shortage.</li>
+                    <li><strong>Lag Window:</strong> The number of previous days we average over in computing the lagged
+                      platelet usage feature. This should be at least 7 days to incorporate information from the previous
+                      week.</li> 
+                    <li><strong>Skip Initial:</strong> The number of initial days we skip in training and evaluating the
+                      model. The effective training window is the previous [History Window] - [Skip Initial] - 5 days.
+                      Similarly, when we validate the model over n days, the number of days during which we record waste
+                      and shortage is n - [Skip Initial] - 7 days.</li>
+                    <li><strong>Model Update Frequency:</strong> How often we retrain the model when predicting over
+                      a range of dates (recommended 7 days).</li>
+                    <li><strong>Range of L1 Bounds on Model Coefs:</strong> This restricts the size of covariate coefficients
+                      using L1-regularization, resulting in sparse models. The model uses cross-validation to select an
+                      appropriate L1 Bound in the range during each retraining step. 0-60 is sufficient for most applications [The lower
+                      bound should ideally be 0 in order to take full advantage of model sparsity].</li>
+                    <li><strong>Bound on Lagged Usage:</strong> Occasionally it is helpful to also restrict the influence of the
+                      previous usage to focus on other features that might cause a break in the pattern. The model uses
+                      cross-validation to determine whether the magnitude of this coefficient should be clipped to the given value.</li>
+                  </ul>")
                 , box(
                   h3("Inventory Requirements for Model")
                   , sliderInput(inputId = "c0"
-                                , label = "Minimum Remaining Fresh Units at EOD - c0 (units):"
+                                , label = "Minimum Remaining Fresh Units at EOD [c0] (units):"
                                 , min = 0
                                 , max = 50
                                 , value = get_SBC_config()$c0)
                   , sliderInput(inputId = "prediction_bias"
-                                , label = "Cross-Validation Prediction Bias (units):"
+                                , label = "Prediction Error Bias [b] (units):"
                                 , min = 0
                                 , max = 100
                                 , value = get_SBC_config()$prediction_bias)
                   , sliderInput(inputId = "penalty_factor"
-                                , label = "Shortage Penalty Factor (X unit Wasted : 1 units Short):"
+                                , label = "Shortage Penalty Factor [pi] (X units Wasted : 1 unit Short):"
                                 , min = 0
                                 , max = 20
                                 , value = get_SBC_config()$penalty_factor)
@@ -285,7 +319,7 @@ body <- dashboardBody(
                                 , value = c(0, 60)
                                 , step = 2)
                   , sliderInput(inputId = "lag_bound"
-                                , label = "Bound on Seven-Day Usage Lag Coef:"
+                                , label = "Bound on Lagged Usage:"
                                 , min = 5
                                 , max = 20
                                 , value = 10)
@@ -319,6 +353,10 @@ body <- dashboardBody(
     )
     , tabItem(tabName = "validation"
               , h2("Prediction Analysis")
+              , h5("Click \"Validate Model\" to run a series of predictions across a given range of 
+                   dates and analyze model performance.")
+              , h5("Click \"Summary Table\" to display the analysis
+                   from a previously computed series of predictions.")
               , fluidRow(
                 box(
                   h3("Prediction Statistics")
@@ -923,6 +961,7 @@ server <- function(input, output, session) {
     p1 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Three-day actual usage`, col = "Actual Usage")) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Three-day prediction`, col = "Predicted Usage")) +
+      ggplot2::ggtitle("Predicted vs. Actual 3-day Usage") +
       ggplot2::labs(x = "Date", y = "Units") +
       ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
       ggplot2::theme(legend.position = "bottom")
@@ -931,23 +970,26 @@ server <- function(input, output, session) {
     p2 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `No. to collect per prediction`, col = "Rec Collection")) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Fresh Units Collected`, col = "True Collection ")) +
+      ggplot2::ggtitle("Recommended vs. Actual Collection") + 
       ggplot2::labs(x = "Date", y = "Units") +
       ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
       ggplot2::theme(legend.position = "bottom")
 
-    # Waste generated by model predictions vs. truth (with inventory expiring in 1 day)
+    # Waste generated by model predictions vs. inventory expiring in 1 day
     p3 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = Waste, col = "Waste")) + 
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 1 day`, col = "Expiring in 1 Day")) + 
+      ggplot2::ggtitle("Model Waste vs. Remaining Inventory Exp. Tomorrow") +
       ggplot2::labs(x = "Date", y = "Units") +
       ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
       ggplot2::theme(legend.position = "bottom")
     
-    # Shortage generated by model prediction vs. truth (with inventory expiring in 2 days)
+    # Shortage generated by model prediction vs. inventory expiring in 2 days
     p4 <- ggplot2::ggplot(data = d) + 
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = Shortage, col = "Shortage")) + 
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Adj. no. expiring in 2 days` + `Adj. no. expiring in 1 day`, 
                                                 col = "Inventory Count")) + 
+      ggplot2::ggtitle("Model Shortage vs. Total Remaining Inventory") +
       ggplot2::labs(x = "Date", y = "Units") +
       ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
       ggplot2::theme(legend.position = "bottom")
@@ -957,6 +999,7 @@ server <- function(input, output, session) {
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `True Waste`, col = "True Waste")) + 
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Inv. expiring in 1 day`, 
                                                 col = "Inv. expiring in 1 day")) +
+      ggplot2::ggtitle("True Waste vs. Remaining Inventory Exp. Tomorrow") + 
       ggplot2::labs(x = "Date", y = "Units") +
       ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
       ggplot2::theme(legend.position = "bottom")
@@ -965,6 +1008,7 @@ server <- function(input, output, session) {
     p6 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `True Shortage`, col = "True Shortage")) + 
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Inv. count`, col = "True Inventory Count")) + 
+      ggplot2::ggtitle("True Shortage vs. Total Remaining Inventory") +
       ggplot2::labs(x = "Date", y = "Units") +
       ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
       ggplot2::theme(legend.position = "bottom")
@@ -1004,8 +1048,9 @@ server <- function(input, output, session) {
       dplyr::filter(name %in% c(input$coefList)) %>% # restrict to coefficients in the specified list
       ggplot2::ggplot() +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = value, group = name, color = name))
-    p1 <- p1 + geom_line(mapping = ggplot2::aes(x = date, y = l1_bound, size = 2, color = "Coefficient Bound"), 
-                         data = coef_table)
+    p1 <- p1 + geom_line(mapping = ggplot2::aes(x = date, y = l1_bound, size = 2, color = "Coefficient L1 Bound"), 
+                         data = coef_table) +
+      ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks"))
     
     p1
   })
