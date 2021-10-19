@@ -329,8 +329,8 @@ build_prediction_table_db <- function(conn,
   pred_table %>%
     dplyr::mutate(`True Waste` = pip::pos(.data$`Inv. expiring in 1 day` - .data$`Platelet usage`)) %>%
     dplyr::mutate(`Fresh Units Collected` = ifelse(dplyr::lead(.data$`Inv. expiring in 2 days`, 1) > 0, 
-                                                  (dplyr::lead(.data$`Inv. count`, 1) - ((.data$`Inv. count` - .data$`Inv. expiring in 2+ days`) -.data$`Platelet usage` - .data$`True Waste`)),
-                                                  ceiling((dplyr::lead(.data$`Inv. expiring in 1 day`, 1) - (.data$`Inv. count` -.data$`Platelet usage` - .data$`True Waste`)))) # Largest value it could possibly be
+                                                  pip::pos((dplyr::lead(.data$`Inv. count`, 1) - dplyr::lead(.data$`Inv. expiring in 2+ days`, 1)) - ((.data$`Inv. count` - .data$`Inv. expiring in 2+ days`) -.data$`Platelet usage` - .data$`True Waste`)),
+                                                  pip::pos((dplyr::lead(.data$`Inv. expiring in 1 day`, 1) - ((.data$`Inv. count` - .data$`Inv. expiring in 2+ days`) -.data$`Platelet usage` - .data$`True Waste`)))) # Largest value it could possibly be
                   ) %>%
     dplyr::mutate(`True Shortage` = pip::pos(.data$`Platelet usage` - (.data$`Inv. count` - `Inv. expiring in 2+ days`) - .data$`Fresh Units Collected`)) ->
     pred_table
@@ -378,13 +378,12 @@ build_coefficient_table_db <- function(conn, pred_start_date, num_days) {
 #' @param w a vector of waste determined by pip::compute_prediction_statistics
 #' @param r1 a vector of remaining inventory determined by pip::compute_prediction_statistics
 #' @param r2 a vector of remaining inventory determined by pip::compute_prediction_statistics
-#' @param s a vector of shortage determined by pip::compute_prediction_statistics
 #' @param penalty_factor factor to additionally penalize shortage terms over waste
 #' @param c0 the minimum inventory level below which we penalize.
 #' @return a vector of losses computed for each hyperparameter
 #' @importFrom dplyr lead
 #' @importFrom pip pos
-compute_proxy_loss <- function(w, r1, r2, s, penalty_factor, c0) {
+compute_proxy_loss <- function(w, r1, r2, penalty_factor, c0) {
   
   if (nrow(w) != nrow(r1) || nrow(w) != nrow(r2)) {
     stop("Waste, inventory, and/or shortage vectors of different lengths.")
@@ -392,9 +391,8 @@ compute_proxy_loss <- function(w, r1, r2, s, penalty_factor, c0) {
   
   waste_loss <- apply(w, 2, function(x) sum(x)) # total waste
   inv_loss <- apply(r1 + r2, 2, function(x) sum(pip::pos(c0 - x))) # total shortage
-  short_loss <- apply(s, 2, function(x) sum(x))
-  
-  loss <- (waste_loss + penalty_factor * (short_loss + inv_loss)) / nrow(w)
+
+  loss <- (waste_loss + penalty_factor * inv_loss) / nrow(w)
   loss
 }
 
@@ -423,7 +421,6 @@ projection_loss <- function(pred_table, config) {
   loss <- compute_proxy_loss(w = matrix(pred_table_trunc$Waste, ncol = 1),
                              r1 = matrix(pred_table_trunc$`No. expiring in 1 day`, ncol = 1),
                              r2 = matrix(pred_table_trunc$`No. expiring in 2 days`, ncol = 1),
-                             s = matrix(pred_table_trunc$Shortage, ncol = 1),
                              penalty_factor = config$penalty_factor,
                              c0 = config$c0)
   
@@ -457,7 +454,6 @@ real_loss <- function(pred_table, config) {
   loss <- compute_proxy_loss(w = matrix(pred_table_trunc$`True Waste`, ncol = 1),
                              r1 = matrix(remaining_inventory, ncol = 1),
                              r2 = matrix(remaining_inventory, ncol = 1), 
-                             s = matrix(pred_table_trunc$`True Shortage`, ncol = 1),
                              penalty_factor = config$penalty_factor,
                              c0 = config$c0)
   

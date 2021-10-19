@@ -483,23 +483,19 @@ server <- function(input, output, session) {
   observeEvent(input$saveFileSettings, {
     
     set_path_params()
-    SBCpip::set_config_param("database_path", input$database_path)
-    
+
     file_settings <- lapply(all_file_settings(), function(x) input[[x]])
     names(file_settings) <- all_file_settings()
     
     result <- tryCatch(saveRDS(file_settings, 
                                file = file.path(config$data_folder, 
                                                 "file_settings.rds")),
-                       error = function(e) {
-                         message(e)
+                       warning = function(e) {
+                         shinyalert::shinyalert("Oops!", "Saving failed. Make sure you have entered the correct data folder.")
+                         return()
                        })
-    if (!is.null(result)) {
-      shinyalert::shinyalert("Oops!", result)
-    } else { 
-      shinyalert::shinyalert("Success!", "Saved New Default File Settings.")
-    }
     
+    shinyalert::shinyalert("Success!", "Saved New Default File Settings.")
     
   })
   
@@ -555,14 +551,11 @@ server <- function(input, output, session) {
     config <- SBCpip::get_SBC_config()
     
     result <- tryCatch(saveRDS(feat_list, file = file.path(config$data_folder, "features.rds")),
-             error = function(e) {
-               message(e)
-             })
-    if (!is.null(result)) {
-      shinyalert::shinyalert("Oops!", result)
-    } else { 
-      shinyalert::shinyalert("Success!", "Saved New Default Features.")
-    }
+                       warning = function(e) {
+                         shinyalert::shinyalert("Oops!", "Saving failed. Make sure you have entered the correct file path.")
+                         return()
+                       })
+    shinyalert::shinyalert("Success!", "Saved New Default Features.")
   })
   
   observeEvent(input$loadFeaturesButton, {
@@ -611,12 +604,6 @@ server <- function(input, output, session) {
     
     SBCpip::set_config_param("census_locations", input$census_features)
     SBCpip::set_config_param("surgery_services", input$surgery_features)
-    SBCpip::set_config_param("database_path", input$database_path)
-    
-    result <- tryCatch(saveRDS(config, file = file.path(config$data_folder, "config.rds")),
-                       error = function(e) {
-                         message(e)
-                       })
     
     # Update the coefficients 
     shinyWidgets::updateMultiInput(session, 
