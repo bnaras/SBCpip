@@ -291,7 +291,7 @@ build_prediction_table_db <- function(conn,
                                                 - pred_mat[i + 1, "x_adj"] - pred_mat[i + 2, "x_adj"] - min(pred_mat[i, "r1_adj"], yma[i]) - pred_mat[i, "r2_adj"]))
   }
   
-  pred_mat[, "Alert"] <- (pred_mat[, "r1"] + pred_mat[, "r2"] <= min_inventory)
+  pred_mat[, "Alert"] <- (pred_mat[, "r1"] + pred_mat[, "r2"] <= config$c0)
   
   conn %>% 
     dplyr::tbl("inventory") %>% 
@@ -329,10 +329,10 @@ build_prediction_table_db <- function(conn,
   pred_table %>%
     dplyr::mutate(`True Waste` = pip::pos(.data$`Inv. expiring in 1 day` - .data$`Platelet usage`)) %>%
     dplyr::mutate(`Fresh Units Collected` = ifelse(dplyr::lead(.data$`Inv. expiring in 2 days`, 1) > 0, 
-                                                  (dplyr::lead(.data$`Inv. count`, 1) - (.data$`Inv. count` -.data$`Platelet usage` - .data$`True Waste`)),
+                                                  (dplyr::lead(.data$`Inv. count`, 1) - ((.data$`Inv. count` - .data$`Inv. expiring in 2+ days`) -.data$`Platelet usage` - .data$`True Waste`)),
                                                   ceiling((dplyr::lead(.data$`Inv. expiring in 1 day`, 1) - (.data$`Inv. count` -.data$`Platelet usage` - .data$`True Waste`)))) # Largest value it could possibly be
                   ) %>%
-    dplyr::mutate(`True Shortage` = pip::pos(.data$`Platelet usage` - .data$`Inv. count` - .data$`Fresh Units Collected`)) ->
+    dplyr::mutate(`True Shortage` = pip::pos(.data$`Platelet usage` - (.data$`Inv. count` - `Inv. expiring in 2+ days`) - .data$`Fresh Units Collected`)) ->
     pred_table
   
   pred_table

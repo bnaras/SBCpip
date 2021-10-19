@@ -202,10 +202,15 @@ body <- dashboardBody(
                     done these steps, click \"Load Features\" to set the previously saved feature set.")
               , fluidRow(
                 box(
-                  h3("Input and Output Locations")
-                  , textInput(inputId = "database_path", label = "Database Path", value = "/Users/kaiokada/Desktop/Research/pip.duckdb")
-                  , textInput(inputId = "data_folder", label = "Data Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_inc/")
-                  , textInput(inputId = "log_folder", label = "Log Folder", value = "/Users/kaiokada/Desktop/Research/platelet_data_full/Blood_Center_Logs/")
+                  h3("File Settings")
+                  , fluidRow(align = "center"
+                    , actionButton(inputId = "saveFileSettings", label = "Save File Settings")
+                    , actionButton(inputId = "loadFileSettings", label = "Load File Settings")
+                  )
+                  , h3("Input and Output Locations")
+                  , textInput(inputId = "database_path", label = "Database Path", value = "E:/database.duckdb")
+                  , textInput(inputId = "data_folder", label = "Data Folder", value = "E:/platelet_predict_daily_data")
+                  , textInput(inputId = "log_folder", label = "Log Folder", value = "E:/Blood_Center_Logs")
                   
                   , h3("Filename Patterns")
                   , textInput(inputId = "cbc_filename_prefix", label = "CBC Files", value = SBCpip::get_SBC_config()$cbc_filename_prefix)
@@ -248,8 +253,8 @@ body <- dashboardBody(
                     <li><strong>Prediction Error Bias [<em>b</em>]:</strong> This positive bias allows selection of
                       model hyperparameters that avoid negative prediction errors, which typically result in shortage. 
                       This value should be similar to c0 above.</li>
-                    <li><strong>Shortage Penalty Factor [<em>pi</em>]:</strong> How much we prioritize eliminating shortage
-                      over minimizing wastage. Impact tends to be lower than that of c0 and b, but it
+                    <li><strong>Shortage Penalty Factor [<em>pi</em>]:</strong> How much we prioritize minimizing shortage
+                      over wastage. Impact tends to be lower than that of c0 and b, but it
                       should be kept high to avoid shortage where possible.</li>
                     <li><strong>History Window:</strong> The number of previous days we consider in retraining the model. We
                       ignore the first [Skip Initial] + 5 days in the window during training time. Larger history windows will tend
@@ -453,26 +458,66 @@ server <- function(input, output, session) {
                              parse_vars(input$surgery_features))
   })
   
+  all_file_settings <- reactive({
+    all_file_settings <- c("data_folder", "log_folder", "database_path",
+                           "cbc_filename_prefix", "census_filename_prefix",
+                           "surgery_filename_prefix", "transfusion_filename_prefix",
+                           "inventory_filename_prefix", "log_filename_prefix")
+  })
+  
   # Exit the app
   observeEvent(input$exitApp, {
     stopApp(TRUE)
   })
   
   set_path_params <- reactive({
-    # Folder names
-    SBCpip::set_config_param("data_folder", input$data_folder)
-    SBCpip::set_config_param("log_folder", input$log_folder)
     
-    # File prefixes
-    SBCpip::set_config_param("cbc_filename_prefix", input$cbc_filename_prefix)
-    SBCpip::set_config_param("census_filename_prefix", input$census_filename_prefix)
-    SBCpip::set_config_param("surgery_filename_prefix", input$surgery_filename_prefix)
-    SBCpip::set_config_param("transfusion_filename_prefix", input$transfusion_filename_prefix)
-    SBCpip::set_config_param("inventory_filename_prefix", input$inventory_filename_prefix)
-    SBCpip::set_config_param("log_filename_prefix", input$log_filename_prefix)
-    
+    sapply(all_file_settings(), function(x) {
+      SBCpip::set_config_param(x, input[[x]])
+    })
+
     # log_folder
     loggit::set_logfile(paste0(input$log_folder, sprintf(input$log_filename_prefix, Sys.Date())))
+  })
+  
+  observeEvent(input$saveFileSettings, {
+    
+    set_path_params()
+    SBCpip::set_config_param("database_path", input$database_path)
+    
+    file_settings <- lapply(all_file_settings(), function(x) input[[x]])
+    names(file_settings) <- all_file_settings()
+    
+    result <- tryCatch(saveRDS(file_settings, 
+                               file = file.path(config$data_folder, 
+                                                "file_settings.rds")),
+                       error = function(e) {
+                         message(e)
+                       })
+    if (!is.null(result)) {
+      shinyalert::shinyalert("Oops!", result)
+    } else { 
+      shinyalert::shinyalert("Success!", "Saved New Default File Settings.")
+    }
+    
+    
+  })
+  
+  observeEvent(input$loadFileSettings, {
+    
+    file_settings <- tryCatch(readRDS(file.path(config$data_folder,
+                                                "file_settings.rds")),
+                              warning = function(e) {
+                                shinyalert::shinyalert("Oops!", "Loading failed. Make sure you have saved file settings first.")
+                                return()
+                              })
+    
+    sapply(all_file_settings(), function(x) {
+      updateTextInput(session, inputId = x, value = file_settings[[x]])
+    })
+    
+    set_path_params()
+    
   })
   
   # Refresh possible features to choose from based on available data files
@@ -567,6 +612,11 @@ server <- function(input, output, session) {
     SBCpip::set_config_param("census_locations", input$census_features)
     SBCpip::set_config_param("surgery_services", input$surgery_features)
     SBCpip::set_config_param("database_path", input$database_path)
+    
+    result <- tryCatch(saveRDS(config, file = file.path(config$data_folder, "config.rds")),
+                       error = function(e) {
+                         message(e)
+                       })
     
     # Update the coefficients 
     shinyWidgets::updateMultiInput(session, 
@@ -1007,7 +1057,7 @@ server <- function(input, output, session) {
     # The actual shortage generated per true protocol
     p6 <- ggplot2::ggplot(data = d) +
       ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `True Shortage`, col = "True Shortage")) + 
-      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Inv. count`, col = "True Inventory Count")) + 
+      ggplot2::geom_line(mapping = ggplot2::aes(x = date, y = `Inv. count` - `Inv. expiring in 2+ days`, col = "True Inventory Count")) + 
       ggplot2::ggtitle("True Shortage vs. Total Remaining Inventory") +
       ggplot2::labs(x = "Date", y = "Units") +
       ggplot2::scale_x_date(breaks = scales::date_breaks("2 weeks")) +
