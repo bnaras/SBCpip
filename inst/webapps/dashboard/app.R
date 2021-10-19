@@ -492,10 +492,11 @@ server <- function(input, output, session) {
                                                 "file_settings.rds")),
                        warning = function(e) {
                          shinyalert::shinyalert("Oops!", "Saving failed. Make sure you have entered the correct data folder.")
-                         return()
+                         simpleWarning(e)$message
                        })
-    
-    shinyalert::shinyalert("Success!", "Saved New Default File Settings.")
+    if (!is.character(result)) {
+      shinyalert::shinyalert("Success!", "Saved New Default File Settings.")
+    }
     
   })
   
@@ -522,19 +523,26 @@ server <- function(input, output, session) {
     set_path_params()
 
     # Grab CBC Features
-    features <- SBCpip::set_features_from_file()
+    features <- tryCatch(SBCpip::set_features_from_file(),
+                         error = function(e) {
+                           shinyalert::shinyalert("Oops!", "Feature Refresh failed. 
+                                                  Make sure you have supplied the correct data folder and updated sbc_data_mapping.csv.")
+                           NULL
+                         })
     
-    shinyWidgets::updateMultiInput(session, inputId = "cbc_features", 
-                                   selected = features$cbc,
-                                   choices = features$cbc)
+    if (!is.null(features)) {
+      shinyWidgets::updateMultiInput(session, inputId = "cbc_features",
+                                     selected = input$cbc_features,
+                                     choices = union(features$cbc, input$cbc_features))
     
-    shinyWidgets::updateMultiInput(session, inputId = "census_features", 
-                                  selected = features$census,
-                                  choices = features$census)
+      shinyWidgets::updateMultiInput(session, inputId = "census_features", 
+                                     selected = input$census_features,
+                                     choices = union(features$census, input$census_features))
     
-    shinyWidgets::updateMultiInput(session, inputId = "surgery_features", 
-                                   selected = features$surgery,
-                                   choices = features$surgery)
+      shinyWidgets::updateMultiInput(session, inputId = "surgery_features", 
+                                     selected = input$surgery_features,
+                                     choices = union(features$surgery, input$surgery_features))
+    }
     
   })
   
@@ -553,9 +561,10 @@ server <- function(input, output, session) {
     result <- tryCatch(saveRDS(feat_list, file = file.path(config$data_folder, "features.rds")),
                        warning = function(e) {
                          shinyalert::shinyalert("Oops!", "Saving failed. Make sure you have entered the correct file path.")
-                         return()
+                         simpleWarning(e)$message
                        })
-    shinyalert::shinyalert("Success!", "Saved New Default Features.")
+    
+    if (!is.character(result)) shinyalert::shinyalert("Success!", "Saved New Default Features.")
   })
   
   observeEvent(input$loadFeaturesButton, {
@@ -564,21 +573,23 @@ server <- function(input, output, session) {
     result <- NULL
     features <- tryCatch(readRDS(file = file.path(config$data_folder, "features.rds")),
                          warning = function(e) {
-                           shinyalert::shinyalert("Oops!", "Loading failed. Make sure you have saved features first.")
-                           return()
+                           shinyalert::shinyalert("Oops!", "Loading failed. Make sure you have supplied the correct folders and saved features.")
+                           NULL
                          })
     
-    shinyWidgets::updateMultiInput(session, inputId = "cbc_features", 
-                                   selected = features$cbc,
-                                   choices = union(features$cbc, input$cbc_features))
+    if (!is.null(features)) {
+      shinyWidgets::updateMultiInput(session, inputId = "cbc_features", 
+                                     selected = features$cbc,
+                                     choices = union(features$cbc, input$cbc_features))
     
-    shinyWidgets::updateMultiInput(session, inputId = "census_features", 
-                                   selected = features$census,
-                                   choices = union(features$census, input$census_features))
+      shinyWidgets::updateMultiInput(session, inputId = "census_features", 
+                                     selected = features$census,
+                                     choices = union(features$census, input$census_features))
     
-    shinyWidgets::updateMultiInput(session, inputId = "surgery_features", 
-                                   selected = features$surgery,
-                                   choices = union(features$surgery, input$surgery_features))
+      shinyWidgets::updateMultiInput(session, inputId = "surgery_features", 
+                                     selected = features$surgery,
+                                     choices = union(features$surgery, input$surgery_features))
+    }
     
   })
   
@@ -919,58 +930,68 @@ server <- function(input, output, session) {
                                                                    updateProgress = updateProgress),
                                     error = function(e) {
                                       output$predAnalysis <- renderTable({
-                                        message(e)
+                                        simpleError(e)$message
                                         }, colnames = FALSE)
-                                      return()
+                                      NULL
                                     })
           
-          validating(FALSE)
+          
         }
-    
-        pred_analysis <- tryCatch(db %>% 
-          SBCpip::build_prediction_table_db(config, start_date, end_date, prediction_df) %>% 
-          SBCpip::pred_table_analysis(config),
-          error = function(e) {
-            output$predAnalysis <- renderTable({
-              message(e)
-              }, colnames = FALSE)
-            return()
-          })
         
-        coef_analysis <- tryCatch(db %>% 
-          SBCpip::build_coefficient_table_db(start_date, num_days) %>%
-          SBCpip::coef_table_analysis(),
-          error = function(e) {
-            output$predAnalysis <- renderTable({
-              message(e)
-              }, colnames = FALSE)
-            return()
-          })
+        if (!validating() | (validating() & !is.null(prediction_df))) {
+          pred_analysis <- tryCatch(db %>% 
+                                      SBCpip::build_prediction_table_db(config, 
+                                                                        start_date, 
+                                                                        end_date, 
+                                                                        prediction_df) %>% 
+                                      SBCpip::pred_table_analysis(config),
+                                    error = function(e) {
+                                      output$predAnalysis <- renderTable({
+                                        simpleError(e)$message
+                                        }, colnames = FALSE)
+                                      NULL
+                                      })
+        
+          coef_analysis <- tryCatch(db %>% 
+                                      SBCpip::build_coefficient_table_db(start_date, 
+                                                                         num_days) %>%
+                                      SBCpip::coef_table_analysis(),
+                                    error = function(e) {
+                                      output$predAnalysis <- renderTable({
+                                        simpleError(e)$message
+                                        }, colnames = FALSE)
+                                      NULL
+                                      })
       
-        db %>% DBI::dbDisconnect(shutdown = TRUE)
+          db %>% DBI::dbDisconnect(shutdown = TRUE)
     
-        # Output both the prediction and coefficient analyses
-        pred_analysis_items <- c("Prediction Started", "Prediction Ended", 
-                                 "Number of Days", "Total Model Waste",
-                                 "Total Model Short", "Total Actual Waste", 
-                                 "Loss from Table", "Real Loss",
-                                 "Overall RMSE", "Positive RMSE", "Negative RMSE", 
-                                 "Sun RMSE", "Mon RMSE", "Tue RMSE", "Wed RMSE", 
-                                 "Thu RMSE", "Fri RMSE", "Sat RMSE")
+          # Output both the prediction and coefficient analyses
+          pred_analysis_items <- c("Prediction Started", "Prediction Ended", 
+                                   "Number of Days", "Total Model Waste",
+                                   "Total Model Short", "Total Actual Waste", 
+                                   "Loss from Table", "Real Loss",
+                                   "Overall RMSE", "Positive RMSE", "Negative RMSE", 
+                                   "Sun RMSE", "Mon RMSE", "Tue RMSE", "Wed RMSE", 
+                                   "Thu RMSE", "Fri RMSE", "Sat RMSE")
+          
+          if (!is.null(pred_analysis)) {
+            output$predAnalysis <- renderTable({
+              unlist(pred_analysis) %>% 
+                as.data.frame() %>%
+                `rownames<-`(pred_analysis_items) %>%
+                `colnames<-`("Stats")
+              }, rownames = TRUE)
+          }
         
-        output$predAnalysis <- renderTable({
-          unlist(pred_analysis) %>% 
-            as.data.frame() %>%
-            `rownames<-`(pred_analysis_items) %>%
-            `colnames<-`("Stats")
-          }, rownames = TRUE)
-        
-        output$coefAnalysis<- renderTable({
-          coef_analysis %>%
-            `$`(other) %>%
-            dplyr::filter(.data$feat != "l1_bound") %>%
-            rbind(coef_analysis$dow)
-          }, rownames = TRUE)
+          if (!is.null(coef_analysis)) {
+            output$coefAnalysis<- renderTable({
+              coef_analysis %>%
+                `$`(other) %>%
+                dplyr::filter(.data$feat != "l1_bound") %>%
+                rbind(coef_analysis$dow)
+              }, rownames = TRUE)
+          }
+        }
       })
     })
   })

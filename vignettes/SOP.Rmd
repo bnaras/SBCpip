@@ -478,6 +478,12 @@ determine whether the model should retrain under the current regime given
 An additional `data_scaling` table is used to store the current data scales (variance) 
 and centers (mean) to standardize the data before it is input to the model. 
 
+To summarize: After running `SBCpip::sbc_build_and_save_full_db()` on the database,
+it should contain the tables `cbc`, `census`, `inventory`, `surgery`, `transfusion`
+(use `DBI::dbListTables()` to confirm that this is the case). After subsequently running
+`SBCpip::sbc_predict_for_range_db` or `SBCpip::predict_for_date_db` should also
+contain the tables `model`, `pred_cache`, and `data_scaling`.
+
 \pagebreak
 
 # Shiny Dashboard
