@@ -488,7 +488,7 @@ server <- function(input, output, session) {
     names(file_settings) <- all_file_settings()
     
     result <- tryCatch(saveRDS(file_settings, 
-                               file = file.path(config$data_folder, 
+                               file = file.path(input$data_folder, 
                                                 "file_settings.rds")),
                        warning = function(e) {
                          shinyalert::shinyalert("Oops!", "Saving failed. Make sure you have entered the correct data folder.")
@@ -502,7 +502,7 @@ server <- function(input, output, session) {
   
   observeEvent(input$loadFileSettings, {
     
-    file_settings <- tryCatch(readRDS(file.path(config$data_folder,
+    file_settings <- tryCatch(readRDS(file.path(input$data_folder,
                                                 "file_settings.rds")),
                               warning = function(e) {
                                 shinyalert::shinyalert("Oops!", "Loading failed. Make sure you have saved file settings first.")

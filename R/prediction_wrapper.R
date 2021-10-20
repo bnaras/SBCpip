@@ -241,9 +241,10 @@ build_prediction_table_db <- function(conn,
   # Important to replace plt_used and t_pred NA values with 0
   tibble::tibble(date = dates) %>%
     dplyr::left_join(d2, by = "date") %>%
-    dplyr::left_join(pred_tbl, by = "date") %>%
+    dplyr::left_join(pred_tbl %>% dplyr::select(c(date, t_pred)), by = "date") %>%
     dplyr::distinct(date, .keep_all = TRUE) %>%
-    tidyr::replace_na(list(plt_used = 0, t_pred = 0)) ->
+    tidyr::replace_na(list(plt_used = 0, t_pred = 0)) %>%
+    dplyr::arrange(date) ->
     pred_tbl_joined
   
   N <- nrow(pred_tbl_joined)
@@ -300,6 +301,7 @@ build_prediction_table_db <- function(conn,
     inventory
   
   tibble::as_tibble(cbind(pred_tbl_joined, pred_mat[seq_len(N), ])) %>%
+    dplyr::arrange(date) %>%
     dplyr::mutate(t_true = dplyr::lead(.data$plt_used, 1L) + dplyr::lead(.data$plt_used, 2L) + dplyr::lead(.data$plt_used, 3L)) %>%
     dplyr::relocate(.data$t_true, .after = .data$plt_used) %>%
     dplyr::left_join(inventory, by = "date") ->

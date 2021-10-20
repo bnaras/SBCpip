@@ -774,6 +774,7 @@ create_dataset <- function(config,
     
     transfusion %>%
         dplyr::rename(plt_used = .data$used) %>%
+        dplyr::arrange(date) %>%
         dplyr::mutate(lag = ma(.data$plt_used, window_size = config$lag_window)) %>%
         dplyr::inner_join({
             cbc_features %>%
@@ -1244,6 +1245,7 @@ predict_for_date <- function(config,
     inventory %>% 
         dplyr::mutate(date = as.Date(.data$date)) %>% # converting from dttm to date (not sure why it is a datetime)
         dplyr::left_join(transfusion, by="date") %>%
+        dplyr::arrange(date) %>%
         dplyr::mutate(collection = dplyr::lead(.data$count, 1) - 
                           .data$count + .data$used + 
                           pip::pos(.data$r1 - .data$used)) %>% # Amt collected
@@ -1264,7 +1266,9 @@ predict_for_date <- function(config,
                                                    cbc_features = cbc_features,
                                                    census = census,
                                                    surgery = surgery,
-                                                   transfusion = transfusion) %>% dplyr::select(all_vars)
+                                                   transfusion = transfusion) %>% 
+        dplyr::select(all_vars) %>%
+        dplyr::arrange(date)
 
     recent_data <- tail(dataset, n = config$history_window + 1L)
     training_data <- head(recent_data, n = config$history_window)
@@ -1397,7 +1401,7 @@ predict_for_date_db <- function(conn, config,
     
     if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
     
-    ## Previous date is one day before unless specified explicity
+    ## Previous date is one day before unless specified explicitly
     if (is.na(prev_day))
         prev_day <- as.character(as.Date(date, format = "%Y-%m-%d") - 1, format = "%Y-%m-%d")
     date_diff <- as.integer(as.Date(date) - as.Date(prev_day))
@@ -1423,12 +1427,9 @@ predict_for_date_db <- function(conn, config,
         }
     }
     
-    # Step 3. Define all variables based on current config (this allows mismatch between database columns and config)
+    # Step 3. Define variables based on current config (this allows mismatch between database columns and config)
     cbc_names <- unname(sapply(config$cbc_vars, function(x) paste0(x, "_Nq")))
     all_hosp_vars <- c(cbc_names, config$census_locations, config$surgery_services)
-    all_vars <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag", 
-                  all_hosp_vars)
-    all_cols <- c("date", all_vars, "plt_used")
     
     # Step 4. Load required data from database and "upsert" the new rows for each table
     # (Note: This assumes that the previously processed data and the new data have the same number of
@@ -1438,6 +1439,8 @@ predict_for_date_db <- function(conn, config,
     
     first_day_train <- as.Date(prev_day) - (config$history_window + config$lag_window)
     first_day_test <- as.Date(prev_day) # Day i 
+    
+    all_db_vars <- NULL
     
     for (i in seq_along(result)) {
 
@@ -1455,11 +1458,15 @@ predict_for_date_db <- function(conn, config,
         new_vars <- names(result[[table_name]])
         db_vars <- names(db_table)
         missing_vars <- new_vars[!(new_vars %in% db_vars)]
-        missing_string <- paste(missing_vars, collapse = ", ")
+        excess_vars <- db_vars[!(db_vars %in% new_vars)]
         
-        if (length(missing_vars) > 0L) {
-            stop(sprintf("Database is missing some of the requested features: %s . Please rebuild the database using these features.", 
-                         missing_string))
+        missing_string <- paste(missing_vars, collapse = ", ")
+        excess_string <- paste(excess_vars, collapse = ", ")
+        
+        if (length(missing_vars) > 0L | length(excess_vars)) {
+            stop(sprintf("Database features must align with those used for prediction. The database is missing features: %s . 
+                         The database contains excess features: %s . Please rebuild the database with these adjustments", 
+                         missing_string, excess_string))
         }
         
         # Note that the upsert function is experimental. May need to replace with manual workaround
@@ -1469,7 +1476,13 @@ predict_for_date_db <- function(conn, config,
             dplyr::rows_upsert(tidyr::as_tibble(result[[table_name]]), by = c("date")) %>%
             dplyr::filter(date >= first_day_train & date <= first_day_test) %>% 
             dplyr::arrange(date) # Make sure dates are sorted because we take contiguous chunks next
+        
+        all_db_vars <- c(all_db_vars, db_vars)
     }
+    
+    all_vars <- c("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag", 
+                  intersect(all_hosp_vars, all_db_vars))
+    all_cols <- c("date", all_vars, "plt_used")
     
     # Step 5. Create the combined dataset
     dataset <- create_dataset(config,
@@ -1487,7 +1500,8 @@ predict_for_date_db <- function(conn, config,
     model_row <- list(age = 0L)
     model_exists <- "model" %in% db_tablenames
     if (model_exists) {
-        model_tbl <- conn %>% dplyr::tbl("model") %>% 
+        model_tbl <- conn %>% 
+            dplyr::tbl("model") %>% 
             dplyr::collect() # Note - must have collect statement (otherwise R aborts)
         model_df <- as.data.frame(model_tbl) 
         model_row <- model_df %>% 
