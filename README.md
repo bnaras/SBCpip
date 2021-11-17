@@ -1,5 +1,7 @@
 # SBCpip
 
+
+## Overview
 `SBCpip` is an R package for processing Stanford Blood Center
 data. The data can then be fed to the [Platelet Inventory Prediction
 (`pip`)](https://bnaras.github.io/pip) package. 
@@ -18,4 +20,3 @@ Then, install `SBCpip` as below.
 library(devtools)
 devtools::install_github("bnaras/SBCpip")
 ```
-

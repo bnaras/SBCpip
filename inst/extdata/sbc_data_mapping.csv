@@ -1,0 +1,22 @@
+data_file,sbc_data_column_name,description,type,org_data_column_name_to_edit
+cbc,ORDER_PROC_ID,CBC Unique Identifier,Character,ORDER_PROC_ID
+cbc,BASE_NAME,Specific blood cell / component type,Character,BASE_NAME
+cbc,RESULT_TIME,Datetime at which the test result was obtained,"Datetime (""%d-%b-%y %H:%M:%S"")",RESULT_TIME
+cbc,ORD_VALUE,Value obtained for the specific component as a result of the test (coerced to Double),Character,ORD_VALUE
+census,PAT_ID,Unique Patient Identifier,Character,PAT_ID
+census,LOCATION_NAME,Name of location where patient was present,Character,LOCATION_NAME
+census,LOCATION_DT,Datetime at which patient was logged as present in a specific location/section of the hospital.,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",LOCATION_DT
+surgery,LOG_ID,Unique identifier for set of surgical procedures,Character,LOG_ID
+surgery,OR_SERVICE,Specific type of surgery to be carried out,Character,OR_SERVICE
+surgery,SURGERY_DATE,Datetime of surgical operation,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",SURGERY_DATE
+surgery,FIRST_SCHED_DATE,Datetime indicating when procedure was first scheduled,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",FIRST_SCHED_DATE
+surgery,CASE_CLASS,Indicator of whether surgery is “Elective” or “Urgent”,Character,CASE_CLASS
+transfusion,DIN,Donation Identification Number that uniquely identifies the group of units transfered,Character,DIN
+transfusion,Product Code,Code that uniquely identifies the product,Character,Product Code
+transfusion,Type,Specific blood cell / component type being transfused. We focus on “PLT”,Character,Type
+transfusion,Issue Date/Time,Datetime when component is transfused to patient ,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",Issue Date/Time
+inventory,Inv. ID,Unique identifier for product in inventory,Character,Inv. ID
+inventory,Type,The specific type of transfusable product (e.g. “PLT”),Character,Type
+inventory,Days to Expire,Number of days after which unit is considered expired,Integer,Days to Expire
+inventory,Exp. Date,Specific date on which unit is set to expire,"Datetime (""%m/%d/%Y  %I:%M:%S %p"")",Exp. Date
+inventory,Exp. Time,Specific time on which unit is set to expire,Double,Exp. Time

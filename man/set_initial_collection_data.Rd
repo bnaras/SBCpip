@@ -2,7 +2,7 @@
 % Please edit documentation in R/sbc_globals.R
 \name{set_initial_collection_data}
 \alias{set_initial_collection_data}
-\title{Set the SBC initial number of units that will be collected for the
+\title{Set the initial number of units that will be collected for the
 first three days}
 \usage{
 set_initial_collection_data(value)
@@ -15,6 +15,6 @@ the changed value of the package global \code{sbc_config}
     invisibly
 }
 \description{
-Set the SBC initial number of units that will be collected for the
+Set the initial number of units that will be collected for the
 first three days
 }
