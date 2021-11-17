@@ -5,6 +5,7 @@
 \title{Predict usage for a specified date}
 \usage{
 predict_for_date(
+  conn,
   config,
   date = as.character(Sys.Date(), format = "\%Y-\%m-\%d"),
   prev_day = NA,
@@ -12,6 +13,8 @@ predict_for_date(
 )
 }
 \arguments{
+\item{conn}{the active database connection object}
+
 \item{config}{the site configuration}
 
 \item{date}{the date string for which the data is to be processed in "YYYY-mm-dd" format}

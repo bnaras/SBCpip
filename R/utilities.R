@@ -54,3 +54,14 @@ model_config_changed <- function(config1, config2) {
     !identical(config1[effective_components], config2[effective_components])
 }
 
+# Helper function to obtain a list of unique dates in the folder following each filename pattern
+gather_dates_by_pattern <- function(data_folder, pattern) {
+    files <- list.files(path = data_folder, pattern = pattern, full.names = TRUE)
+    
+    # Extract the date from each filename (assume date immediately follows pattern in YYYY-MM-DD format)
+    dates <- sapply(files, function(x) {
+        date <- substring(x, first = stringr::str_length(data_folder) + stringr::str_length(pattern) + 1L, 
+                          last = stringr::str_length(data_folder) + stringr::str_length(pattern) + 10L)
+    })
+    unique(dates)
+}

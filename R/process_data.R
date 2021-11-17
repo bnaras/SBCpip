@@ -10,11 +10,21 @@
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
 #' @importFrom dplyr rename
 #' @importFrom loggit set_logfile loggit
+#' @examples
+#' config <- SBCpip::get_SBC_config()
+#' filename <- system.file("extdata", "platelet_data_sample", 
+#'                         "Hospital_Daily_CBC2020-05-02-fake.csv",
+#'                         package = "SBCpip")
+#' cbc_data <- read_one_cbc_file(filename, config$cbc_abnormals, config$cbc_vars)
 #' @export
 read_one_cbc_file <- function(filename, cbc_abnormals, cbc_vars, 
-                              org_cols = c("ORDER_PROC_ID", "BASE_NAME", "RESULT_TIME", "ORD_VALUE")) {
+                              org_cols = c("ORDER_PROC_ID", "BASE_NAME", 
+                                           "RESULT_TIME","ORD_VALUE")) {
     if (length(filename) != 1L){
         stop("Not enough CBC files found.")
+    }
+    if (length(org_cols) != 4L) {
+        stop("Org column specification does not map to SBC specification. Expected 4 CBC columns.")
     }
     
     ## ORD_VALUE can have values like "<0.1", so we read as char
@@ -169,11 +179,20 @@ process_all_cbc_files <- function(data_folder,
 #' @return a list of four items, filename, raw_data (tibble), report a
 #'     list consisting of summary tibble, census_data (tibble)
 #' @importFrom readr cols col_integer col_character col_datetime read_tsv
+#' @examples
+#' config <- get_SBC_config()
+#' filename <- system.file("extdata", "platelet_data_sample", 
+#'                         "Hospital_Daily_Census2020-05-02-fake.csv",
+#'                         package = "SBCpip")
+#' cbc_data <- read_one_cbc_file(filename, config$census_locations)
 #' @export
 read_one_census_file <- function(filename, locations, 
                                  org_cols = c("PAT_ID", "LOCATION_NAME", "LOCATION_DT")) {
     if (length(filename) != 1L){
         stop("Not enough census files found.")
+    }
+    if (length(org_cols) != 3L) {
+        stop("Org column specification does not map to SBC specification. Expected 3 census columns.")
     }
     
     sbc_cols <- c("PAT_ID", "LOCATION_NAME", "LOCATION_DT")
@@ -317,6 +336,9 @@ read_one_transfusion_file <- function(filename,
     if (length(filename) != 1L){
         stop("Not enough transfusion files found.")
     }
+    if (length(org_cols) != 4L) {
+        stop("Org column specification does not map to SBC specification. Expected 4 transfusion columns.")
+    }
     
     sbc_cols <- c("DIN", "Product Code", "Type", "Issue Date/Time")
 
@@ -435,6 +457,9 @@ read_one_surgery_file <- function(filename, services,
     if (length(filename) != 1L){
         stop("Not enough surgery files found.")
     }
+    if (length(org_cols) != 5L) {
+        stop("Org column specification does not map to SBC specification. Expected 5 surgery columns.")
+    }
     
     sbc_cols <- c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS")
     
@@ -487,6 +512,9 @@ read_next_three_surgery_files <- function(filenames, services,
                                           org_cols = c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS")) {
     if (length(filenames) != 3L){
         stop("Not enough future surgery files found.")
+    }
+    if (length(org_cols) != 5L) {
+        stop("Org column specification does not map to SBC specification. Expected 5 surgery columns.")
     }
     
     sbc_cols <- c("LOG_ID", "OR_SERVICE", "SURGERY_DATE", "FIRST_SCHED_DATE", "CASE_CLASS")
@@ -1024,6 +1052,10 @@ read_one_inventory_file <- function(filename,
         date <- lubridate::ymd_hms(date_string, tz = "America/Los_Angeles") - lubridate::ddays(1)
     }
     
+    if (length(org_cols) != 5L) {
+        stop("Org column specification does not map to SBC specification. Expected 5 inventory columns.")
+    }
+    
     sbc_cols <- c("Inv. ID", "Type", "Days to Expire", "Exp. Date", "Exp. Time")
 
     loggit::loggit(log_lvl = "INFO", log_msg = paste("Processing", basename(path = filename),
@@ -1130,248 +1162,7 @@ process_all_inventory_files <- function(data_folder,
         dplyr::arrange(date)
 }
 
-
 #' Predict usage for a specified date
-#'
-#' This function updates the saved datasets (therefore, has
-#' side-effects) by reading incremental data for a specified date. The
-#' \code{prev_day} argument can be specified in case the pipeline
-#' fails for some reason to catch up. Note that the default set up is
-#' one where the prediction is made on the morning of day \eqn{i + 1}
-#' for day \eqn{i}.
-#'
-#' @param config the site configuration
-#' @param date the date string for which the data is to be processed in "YYYY-mm-dd" format
-#' @param prev_day the previous date, default NA, which means it is computed from date
-#' @param eval TRUE or FALSE value for whether to evaluate model during predictions
-#' @return a prediction tibble named prediction_df with a column for date and the prediction
-#' @importFrom pip build_model predict_three_day_sum evaluate_model
-#' @importFrom magrittr %>%
-#' @importFrom dplyr group_by summarize_all
-#' @importFrom loggit set_logfile loggit
-#' @export
-predict_for_date <- function(config,
-                             date = as.character(Sys.Date(), format = "%Y-%m-%d"),
-                             prev_day = NA,
-                             eval = FALSE) {
-
-    ## Previous date is one day before unless specified explicity
-    if (is.na(prev_day))
-        prev_day <- as.character(as.Date(date, format = "%Y-%m-%d") - 1, format = "%Y-%m-%d")
-
-    loggit::loggit(log_lvl = "INFO", log_msg = paste("Step 1. Loading previously processed data on", prev_day))
-    
-    ############## REPLACE WITH DATABASE CALL ######################
-    prev_data <- readRDS(file = file.path(config$output_folder,
-                                          sprintf(config$output_filename_prefix, prev_day)))
-    ## Process data for the date
-    loggit::loggit(log_lvl = "INFO", log_msg = paste("Step 2. Processing incremental data for date", date))
-    result <- process_data_for_date(config = config, date = date)
-
-    ## If the incrementals only contain data for multiple dates, reduce via sum
-    ## This only applies to census and transfusion since the cbc data is not summarized
-    ## until the cbc_features are created, where the procedure will capture the additional data
-    ## for a repeated date during grouping
-    multiple_dates_in_increment <- FALSE
-    unique_cbc_dates <- unique(result$cbc$date)
-    if (length(unique_cbc_dates) > 1L) {
-        loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in cbc file, model retraining forced!")
-        loggit::loggit(log_lvl = "WARN", log_msg = unique_cbc_dates)
-        multiple_dates_in_increment <- TRUE
-    }
-    unique_census_dates <- unique(result$census$date)
-    if (length(unique_census_dates) > 1L) {
-        loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in census file, model retraining forced!")
-        loggit::loggit(log_lvl = "WARN", log_msg = unique_census_dates)
-        multiple_dates_in_increment <- TRUE
-    }
-    
-    unique_surgery_dates <- unique(result$surgery$date)
-    if (length(unique_surgery_dates) > 1L) {
-        loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in surgery file, model retraining forced!")
-        loggit::loggit(log_lvl = "WARN", log_msg = unique_surgery_dates)
-        multiple_dates_in_increment <- TRUE
-    }
-    
-    unique_transfusion_dates <- unique(result$transfusion$date)
-    if (length(unique_transfusion_dates) > 1L) {
-        loggit::loggit(log_lvl = "WARN", log_msg = "Multiple dates in transfusion file, model retraining forced!")
-        loggit::loggit(log_lvl = "WARN", log_msg = unique_transfusion_dates)
-        multiple_dates_in_increment <- TRUE
-    }
-
-    ## Update prev_data with increment along with the model_age
-    loggit::loggit(log_lvl = "INFO", log_msg = "Step 3. Adding new increment to previous data")
-    date_diff <- as.integer(as.Date(date) - as.Date(prev_day))
-
-    ## For cbc, we don't need to do anything for data for previous dates since the summarization
-    ## of cbc_features will automatically handle those dates.
-    cbc <- prev_data$cbc <- dplyr::bind_rows(prev_data$cbc, result$cbc)
-
-    ## For census, we need to add any new data for previous dates, using sum
-    dplyr::bind_rows(prev_data$census, result$census) %>%
-        dplyr::group_by(date) %>%
-        dplyr::summarize_all(sum) ->
-        census ->
-        prev_data$census
-    
-    ## For surgery, we need to add any new data for previous dates, using sum
-    dplyr::bind_rows(prev_data$surgery, result$surgery) %>%
-        dplyr::group_by(date) %>%
-        dplyr::summarize_all(sum) ->
-        surgery ->
-        prev_data$surgery
-
-    ## For transfusion, we need to add any new data for previous dates, using sum
-    dplyr::bind_rows(prev_data$transfusion, result$transfusion) %>%
-        dplyr::group_by(date) %>%
-        dplyr::summarize_all(sum) ->
-        transfusion ->
-        prev_data$transfusion
-
-    prev_data$inventory <- inventory <- dplyr::bind_rows(prev_data$inventory, result$inventory)
-
-    loggit::loggit(log_lvl = "INFO", log_msg = "Step 3a. Creating CBC features")
-
-    ## Create dataset. We add the lag window to avoid NAs at the beginning of the dataset
-    cbc_features <- tail(cbc, config$history_window + config$lag_window + 1L)
-    census <- tail(census, config$history_window + config$lag_window + 1L)
-    surgery <- tail(surgery, config$history_window + config$lag_window + 1L)  # need lag_window for smoothing
-    transfusion <- tail(transfusion, config$history_window + config$lag_window + 1L) # need lag_window for lag
-    
-    # Obtain collection and expiry data (add 1 for the additional previous day's inventory)
-    inventory <- tail(inventory, config$history_window + 1L)
-    
-    inventory %>% 
-        dplyr::mutate(date = as.Date(.data$date)) %>% # converting from dttm to date (not sure why it is a datetime)
-        dplyr::left_join(transfusion, by="date") %>%
-        dplyr::arrange(date) %>%
-        dplyr::mutate(collection = dplyr::lead(.data$count, 1) - 
-                          .data$count + .data$used + 
-                          pip::pos(.data$r1 - .data$used)) %>% # Amt collected
-        dplyr::mutate(expiry1 = .data$r1 + .data$r2) %>% # Expiring in 1 day
-        dplyr::mutate(expiry2 = .data$r3_plus) -> inventory
-
-    loggit::loggit(log_lvl = "INFO", log_msg = "Step 3b. Creating training/prediction dataset")
-
-    # define all variables (this allows mismatch between RDS columns and config)
-    cbc_names <- unname(sapply(config$cbc_vars, function(x) paste0(x, "_Nq")))
-    all_vars <- c("date", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun", "lag",
-                  cbc_names, 
-                  config$census_locations, 
-                  config$surgery_services,
-                  "plt_used")
-
-    dataset <- prev_data$dataset <- create_dataset(config,
-                                                   cbc_features = cbc_features,
-                                                   census = census,
-                                                   surgery = surgery,
-                                                   transfusion = transfusion) %>% 
-        dplyr::select(all_vars) %>%
-        dplyr::arrange(date)
-
-    recent_data <- tail(dataset, n = config$history_window + 1L)
-    training_data <- head(recent_data, n = config$history_window)
-    new_data <- tail(recent_data, n = 1L)
-
-    ## If it is time to update the model, do so
-    ## One way that can happen...
-    model_changed <- model_config_changed(prev_data$config, config)
-    loggit::loggit(log_lvl = "INFO", log_msg = "Step 4. Checking model age")
-    model_needs_updating <- (multiple_dates_in_increment ||
-                             is.null(prev_data$model_age) ||
-                             model_changed ||
-                             (prev_data$model_age %% config$model_update_frequency == 0L) ||
-                             (date_diff > config$model_update_frequency))
-    
-    if (model_needs_updating) {
-        ## Provide informative log
-        if (is.null(prev_data$model_age)) {
-            prev_data$model_age <- 0L  ## Set age to 0 for first time
-            loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. First time, so building model")
-        } else if (multiple_dates_in_increment) {
-            loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Multiple dates in data increment, so model training forced")
-        } else if (model_changed) {
-            loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Model changed, so model rebuilding and training forced")
-        } else {
-            loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Model is stale, so updating model")
-        }
-
-        prev_data$scaled_dataset <- scaled_dataset <- scale_dataset(training_data) # center and scale are NULL
-
-        # ensure that no NA values are fed into build_model
-        data <- as.data.frame(scaled_dataset$scaled_data, optional=TRUE)
-
-        if (sum(is.na(data)) > 0) {
-            data[is.na(data)] <- 0
-            loggit::loggit(log_lvl = "WARN", log_msg ='Warning: NA values found in scaled dataset - replacing with 0')
-        }
-
-        prev_data$model <- pip::build_model(data = data,
-                                            c0 = config$c0,
-                                            history_window = config$history_window,
-                                            penalty_factor = config$penalty_factor,
-                                            rss_bias = config$prediction_bias,
-                                            start = config$start,
-                                            l1_bounds = config$l1_bounds,
-                                            lag_bounds = config$lag_bounds)
-        if (eval) {
-            # Take this opportunity to evaluate the model
-            pip::evaluate_model(data = data,
-                        c0 = config$c0,
-                        train_window = config$history_window - 14L,
-                        test_window = 14L,
-                        penalty_factor = config$penalty_factor,
-                        rss_bias = config$prediction_bias,
-                        start = config$start,
-                        l1_bounds = config$l1_bounds,
-                        lag_bounds = config$lag_bounds)
-        }
-        
-    } else {
-        loggit::loggit(log_lvl = "INFO", log_msg = "Step 4.1. Using previous model and scaling")
-        ## use previous scaling which is available in the saved scaled_dataset
-
-        prev_data$scaled_dataset <- scaled_dataset <- scale_dataset(training_data,
-                                                                    center = prev_data$scaled_dataset$center,
-                                                                    scale = prev_data$scaled_dataset$scale)
-    }
-
-    ## Make prediction and update dataset for prediction
-    loggit::loggit(log_lvl = "INFO", log_msg = "Step 5. Predicting and bumping model age")
-    new_scaled_data <- scale_dataset(new_data,
-                                     center = scaled_dataset$center,
-                                     scale = scaled_dataset$scale)$scaled_data
-    
-    prediction <- pip::predict_three_day_sum(model = prev_data$model,
-                                             new_data = as.data.frame(new_scaled_data, optional=TRUE)) ## last row is what we  want to predict for
-    # Make sure prediction is returning a valid response. No point in continuing otherwise.
-    if (is.nan(prediction)) {
-        stop(sprintf("Next three day prediction returned NaN for %s", date))
-    }
-
-    prediction_df <- tibble::tibble(date = new_data$date, t_pred = prediction)
-
-    if (is.null(prev_data$prediction_df)) {
-        prev_data$prediction_df <- prediction_df
-    } else {
-        prev_data$prediction_df <- rbind(prev_data$prediction_df, prediction_df)
-    }
-
-    prev_data$model_age <- prev_data$model_age + date_diff ## should it be by the diff?
-    ## Save configuration as well
-    prev_data$config <- config
-
-    ## Save dataset back for next day
-    loggit::loggit(log_lvl = "INFO", log_msg = "Step 6. Save results for next day")
-    
-    ################ REPLACE WITH DATABASE CALL ##########################
-    saveRDS(prev_data, file = file.path(config$output_folder,
-                                        sprintf(config$output_filename_prefix, date)))
-    prediction_df
-}
-
-# DB version of single day prediction
 #'
 #' This function updates the saved datasets (therefore, has
 #' side-effects) by reading incremental data for a specified date. The
@@ -1394,7 +1185,7 @@ predict_for_date <- function(config,
 #' @importFrom tibble tibble
 #' @importFrom loggit set_logfile loggit
 #' @export
-predict_for_date_db <- function(conn, config,
+predict_for_date <- function(conn, config,
                                 date = as.character(Sys.Date(), format = "%Y-%m-%d"),
                                 prev_day = NA,
                                 eval = FALSE) {
@@ -1613,7 +1404,7 @@ predict_for_date_db <- function(conn, config,
     if (!model_exists) {
         conn %>% DBI::dbWriteTable("model", model_row)
     } else {
-        conn %>% upsert_db("model", model_row, by = "date")
+        conn %>% upsert_to_database("model", model_row, by = "date")
     }
     
     
@@ -1627,7 +1418,7 @@ predict_for_date_db <- function(conn, config,
     # Upsert new data
     for (i in seq_along(result)) {
         table_name <- names(updated_data)[i]
-        conn %>% upsert_db(table_name, result[[table_name]], by = "date")
+        conn %>% upsert_to_database(table_name, result[[table_name]], by = "date")
     }
     print(prediction_df)
     
@@ -1636,43 +1427,10 @@ predict_for_date_db <- function(conn, config,
     if (!pred_cache_exists) {
         conn %>% DBI::dbWriteTable("pred_cache", prediction_df)
     } else {
-        conn %>% upsert_db("pred_cache", prediction_df, by = "date")
+        conn %>% upsert_to_database("pred_cache", prediction_df, by = "date")
     }
     
     prediction_df
-}
-
-#' Get the actual prediction and platelet usage data from saved files for each date
-#'
-#' This function reads a saved dataset and returns a tibble with a
-#' date, platelet usage, and three day predicted sum ensuring that the
-#' prediction and dates are lined up correctly.
-#'
-#' @param config the site configuration
-#' @param start_date the starting date in YYYY-mm-dd format
-#' @param end_date the end date in YYYY-mm-dd format
-#' @return a tibble of three variables: date, the corresponding
-#'     prediction and the platelet usage for that date
-#' @importFrom magrittr %>%
-#' @importFrom dplyr select left_join
-#' @export
-get_prediction_and_usage <- function(config, start_date, end_date) {
-    dates <- seq.Date(from = start_date, to = end_date, by = 1L)
-    output_files <- list.files(path = config$output_folder,
-                               pattern = paste0("^",
-                                                substring(config$output_filename_prefix, first = 1, last = 10)),
-                               full.names = TRUE)
-    
-    ############## REPLACE WITH DATABASE CALL ###################
-    # There is no database version of this function. 
-    # The prediction_df is not stored in the database as of now.
-    d <- readRDS(tail(output_files, 1L))
-    d$dataset %>%
-        dplyr::select(.data$date, .data$plt_used) ->
-        d2
-    tibble::tibble(date = dates) %>%
-        dplyr::left_join(d2, by = "date") %>%
-        dplyr::left_join(d$prediction_df, by = "date")
 }
 
 
@@ -1686,7 +1444,7 @@ get_prediction_and_usage <- function(config, start_date, end_date) {
 #' @importFrom dplyr tbl collect
 #' @importFrom DBI dbExecute
 #' @export
-upsert_db <- function(conn, df_name, new_row, by = "date") {
+upsert_to_database <- function(conn, df_name, new_row, by = "date") {
     
     if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
     

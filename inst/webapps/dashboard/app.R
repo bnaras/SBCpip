@@ -9,7 +9,8 @@ library(DBI)
 library(duckdb)
 library(scales)
 
-paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", package = "SBCpip"))
+paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", 
+                                               package = "SBCpip", mustWork = TRUE))
 data_tables <-   data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
 
 ## Initialization code
@@ -20,10 +21,13 @@ SBCpip::set_org_col_params()
 ## Read column mappings from the sbc_data_mapping file.
 
 ## Set config params for cbc quantiles and abnormals
-cbc_threshold_file <- system.file("extdata", "cbc_thresholds.csv", package = "SBCpip")
+cbc_threshold_file <- system.file("extdata", "cbc_thresholds.csv",
+                                  package = "SBCpip", mustWork = TRUE)
 cbc_thresholds <- read.csv(cbc_threshold_file)
-cbc_quantiles_tbl <- cbc_thresholds %>% dplyr::filter(metric == "quantile")
-cbc_abnormals_tbl <- cbc_thresholds %>% dplyr::filter(metric == "abnormal")
+cbc_quantiles_tbl <- cbc_thresholds %>% 
+  dplyr::filter(metric == "quantile")
+cbc_abnormals_tbl <- cbc_thresholds %>% 
+  dplyr::filter(metric == "abnormal")
 
 ## Helper to convert CBC quantiles from external table to the appropriate config functions
 cbc_quantile_to_function <- function(component, table) {
@@ -208,17 +212,32 @@ body <- dashboardBody(
                     , actionButton(inputId = "loadFileSettings", label = "Load File Settings")
                   )
                   , h3("Input and Output Locations")
-                  , textInput(inputId = "database_path", label = "Database Path", value = "E:/database.duckdb")
-                  , textInput(inputId = "data_folder", label = "Data Folder", value = "E:/platelet_predict_daily_data")
-                  , textInput(inputId = "log_folder", label = "Log Folder", value = "E:/Blood_Center_Logs")
+                  , textInput(inputId = "database_path", label = "Database Path", 
+                              value = SBCpip::get_SBC_config()$database_path)
+                  , textInput(inputId = "data_folder", label = "Data Folder", 
+                              value = SBCpip::get_SBC_config()$data_folder)
+                  , textInput(inputId = "log_folder", label = "Log Folder", 
+                              value = SBCpip::get_SBC_config()$log_folder)
                   
                   , h3("Filename Patterns")
-                  , textInput(inputId = "cbc_filename_prefix", label = "CBC Files", value = SBCpip::get_SBC_config()$cbc_filename_prefix)
-                  , textInput(inputId = "census_filename_prefix", label = "Census Files", value = SBCpip::get_SBC_config()$census_filename_prefix)
-                  , textInput(inputId = "transfusion_filename_prefix", label = "Transfusion Files", value = SBCpip::get_SBC_config()$transfusion_filename_prefix)
-                  , textInput(inputId = "surgery_filename_prefix", label = "Surgery Files", value = SBCpip::get_SBC_config()$surgery_filename_prefix)
-                  , textInput(inputId = "inventory_filename_prefix", label = "Inventory Files", value = SBCpip::get_SBC_config()$inventory_filename_prefix)
-                  , textInput(inputId = "log_filename_prefix", label = "Log Files", value = SBCpip::get_SBC_config()$log_filename_prefix)
+                  , textInput(inputId = "cbc_filename_prefix", 
+                              label = "CBC Files", 
+                              value = SBCpip::get_SBC_config()$cbc_filename_prefix)
+                  , textInput(inputId = "census_filename_prefix", 
+                              label = "Census Files", 
+                              value = SBCpip::get_SBC_config()$census_filename_prefix)
+                  , textInput(inputId = "transfusion_filename_prefix", 
+                              label = "Transfusion Files", 
+                              value = SBCpip::get_SBC_config()$transfusion_filename_prefix)
+                  , textInput(inputId = "surgery_filename_prefix", 
+                              label = "Surgery Files", 
+                              value = SBCpip::get_SBC_config()$surgery_filename_prefix)
+                  , textInput(inputId = "inventory_filename_prefix", 
+                              label = "Inventory Files", 
+                              value = SBCpip::get_SBC_config()$inventory_filename_prefix)
+                  , textInput(inputId = "log_filename_prefix", 
+                              label = "Log Files", 
+                              value = SBCpip::get_SBC_config()$log_filename_prefix)
                 )
                 , box(
                   h3("Feature Names")
@@ -389,7 +408,8 @@ body <- dashboardBody(
 )
 
 dbHeader <- dashboardHeader()
-logo_src <- system.file("webapps", "dashboard", "assets", "sbc.png", package = "SBCpip")
+logo_src <- system.file("webapps", "dashboard", "assets", "sbc.png", 
+                        package = "SBCpip", mustWork = TRUE)
 dbHeader$children[[2]]$children <-  tags$a(href='https://stanfordbloodcenter.org',
                                            tags$img(src = 'https://sbcdonor.org/client_assets/images/logos/logo_stanford.png',
                                                     alt = 'Stanford Blood Center Dashboard', height = '40'))
@@ -475,9 +495,6 @@ server <- function(input, output, session) {
     sapply(all_file_settings(), function(x) {
       SBCpip::set_config_param(x, input[[x]])
     })
-
-    # log_folder
-    loggit::set_logfile(paste0(input$log_folder, sprintf(input$log_filename_prefix, Sys.Date())))
   })
   
   observeEvent(input$saveFileSettings, {
@@ -487,9 +504,14 @@ server <- function(input, output, session) {
     file_settings <- lapply(all_file_settings(), function(x) input[[x]])
     names(file_settings) <- all_file_settings()
     
+    package.path <- find.package("SBCpip",
+                                 lib.loc = NULL, quiet = FALSE,
+                                 verbose = getOption("verbose"))
+    destination.path <- file.path(package.path,
+                                  "user_settings", "file_settings.rds")
+    
     result <- tryCatch(saveRDS(file_settings, 
-                               file = file.path(input$data_folder, 
-                                                "file_settings.rds")),
+                               file = destination.path),
                        warning = function(e) {
                          shinyalert::shinyalert("Oops!", "Saving failed. Make sure you have entered the correct data folder.")
                          simpleWarning(e)$message
@@ -502,9 +524,14 @@ server <- function(input, output, session) {
   
   observeEvent(input$loadFileSettings, {
     
-    file_settings <- tryCatch(readRDS(file.path(input$data_folder,
-                                                "file_settings.rds")),
-                              warning = function(e) {
+    package.path <- find.package("SBCpip",
+                                 lib.loc = NULL, quiet = FALSE,
+                                 verbose = getOption("verbose"))
+    destination.path <- file.path(package.path,
+                                  "user_settings", "file_settings.rds")
+    
+    file_settings <- tryCatch(readRDS(file = destination.path),
+                              error = function(e) {
                                 shinyalert::shinyalert("Oops!", "Loading failed. Make sure you have saved file settings first.")
                                 return()
                               })
@@ -558,12 +585,19 @@ server <- function(input, output, session) {
     
     config <- SBCpip::get_SBC_config()
     
-    result <- tryCatch(saveRDS(feat_list, file = file.path(config$data_folder, "features.rds")),
+    package.path <- find.package("SBCpip",
+                                 lib.loc = NULL, quiet = FALSE,
+                                 verbose = getOption("verbose"))
+    destination.path <- file.path(package.path,
+                                  "user_settings", "features.rds")
+    
+    result <- tryCatch(saveRDS(feat_list, 
+                               file = destination.path),
                        warning = function(e) {
                          shinyalert::shinyalert("Oops!", "Saving failed. Make sure you have entered the correct file path.")
                          simpleWarning(e)$message
                        })
-    
+                       
     if (!is.character(result)) shinyalert::shinyalert("Success!", "Saved New Default Features.")
   })
   
@@ -571,8 +605,15 @@ server <- function(input, output, session) {
     # Grab CBC Features
     config <- SBCpip::get_SBC_config()
     result <- NULL
-    features <- tryCatch(readRDS(file = file.path(config$data_folder, "features.rds")),
-                         warning = function(e) {
+    
+    package.path <- find.package("SBCpip",
+                                 lib.loc = NULL, quiet = FALSE,
+                                 verbose = getOption("verbose"))
+    destination.path <- file.path(package.path,
+                                  "user_settings", "features.rds")
+    
+    features <- tryCatch(readRDS(file = destination.path),
+                         error = function(e) {
                            shinyalert::shinyalert("Oops!", "Loading failed. Make sure you have supplied the correct folders and saved features.")
                            NULL
                          })
@@ -687,7 +728,7 @@ server <- function(input, output, session) {
     showModal(modalDialog(sprintf("Building DuckDB database based on all available files in %s. 
                                     Estimated total time is %d minutes", config$data_folder, floor(n_files / 400)),
                           footer = NULL))
-    date_range <- tryCatch(db %>% SBCpip::sbc_build_and_save_full_db(config, updateProgress), error = function(e) {
+    date_range <- tryCatch(db %>% SBCpip::build_and_save_database(config, updateProgress), error = function(e) {
       print(e)
       NULL
     })
@@ -810,7 +851,7 @@ server <- function(input, output, session) {
       shinyalert::shinyalert("Note", "Model is retraining - this may take some time to complete.")
     }
     
-    pr <- db %>% SBCpip::predict_for_date_db(config = config, date = input$predictDate) %>%
+    pr <- db %>% SBCpip::predict_for_date(config = config, date = input$predictDate) %>%
       dplyr::mutate_at("date", as.character)
     
     coefs <- db %>% dplyr::tbl("model") %>% 
@@ -926,7 +967,7 @@ server <- function(input, output, session) {
           }
     
           # Predict range that needs to be predicted
-          prediction_df <- tryCatch(db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config, 
+          prediction_df <- tryCatch(db %>% SBCpip::predict_usage_over_range(start_date, num_days, config, 
                                                                    updateProgress = updateProgress),
                                     error = function(e) {
                                       output$predAnalysis <- renderTable({
@@ -940,11 +981,11 @@ server <- function(input, output, session) {
         
         if (!validating() | (validating() & !is.null(prediction_df))) {
           pred_analysis <- tryCatch(db %>% 
-                                      SBCpip::build_prediction_table_db(config, 
+                                      SBCpip::build_prediction_table(config, 
                                                                         start_date, 
                                                                         end_date, 
                                                                         prediction_df) %>% 
-                                      SBCpip::pred_table_analysis(config),
+                                      SBCpip::analyze_prediction_table(config),
                                     error = function(e) {
                                       output$predAnalysis <- renderTable({
                                         simpleError(e)$message
@@ -953,9 +994,9 @@ server <- function(input, output, session) {
                                       })
         
           coef_analysis <- tryCatch(db %>% 
-                                      SBCpip::build_coefficient_table_db(start_date, 
+                                      SBCpip::build_coefficient_table(start_date, 
                                                                          num_days) %>%
-                                      SBCpip::coef_table_analysis(),
+                                      SBCpip::analyze_coef_table(),
                                     error = function(e) {
                                       output$predAnalysis <- renderTable({
                                         simpleError(e)$message
@@ -1009,8 +1050,8 @@ server <- function(input, output, session) {
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
     }, add = TRUE)
     
-    db %>% build_prediction_table_db(config, start_date = input$plotDateStart, 
-                                     end_date = input$plotDateEnd) %>%
+    db %>% build_prediction_table(config, start_date = input$plotDateStart,
+                                  end_date = input$plotDateEnd) %>%
       dplyr::filter(date >= input$plotDateStart + config$start + 5L) %>%
       dplyr::filter(date <= input$plotDateEnd - 3L) ->
       d
@@ -1096,9 +1137,9 @@ server <- function(input, output, session) {
     end_date <- as.Date(input$coefPlotDateEnd)
     num_days <- as.integer(end_date - start_date + 1)
     
-    coef_table <- db %>% SBCpip::build_coefficient_table_db(start_date, num_days)
+    coef_table <- db %>% SBCpip::build_coefficient_table(start_date, num_days)
     
-    pred_table <- db %>% SBCpip::build_prediction_table_db(config, start_date, end_date)
+    pred_table <- db %>% SBCpip::build_prediction_table(config, start_date, end_date)
     
     # Number of units expiring in 1 day (4) + number expiring in 2 days (5)
     p1 <- coef_table %>% 

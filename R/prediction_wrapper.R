@@ -1,71 +1,5 @@
 #%%%%%%%%%%%%%%%%% Prediction Helper Functions %%%%%%%%%%%%%%%%%
 
-#' Generate seed database for use in prediction
-#'
-#' @param conn the active database connection object
-#' @param pred_start_date, the start date for the prediction, used to specify
-#'     date range for the seed dataset.
-#' @param config the site-specific configuration
-#' @return nothing (saves an RDS file with the seed data for 1 day before prediction date)
-#' @importFrom DBI dbRemoveTable
-#' @importFrom loggit set_logfile loggit
-#' @importFrom magrittr %<>%
-#' @importFrom dplyr copy_to
-#' @export
-sbc_build_and_save_seed_db <- function(conn, pred_start_date, config) {
-  
-  if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
-  
-  # Remove the model and data_scaling tables because we are setting up a new set of seed data.
-  overwrite <- readline(prompt="This function will overwrite existing data tables. Continue? ")
-  if (tolower(overwrite) != "yes" & tolower(overwrite) != "y") {
-    stop("Seed data build stopped.")
-  }
-  try(DBI::dbRemoveTable(conn, "model"), TRUE)
-  try(DBI::dbRemoveTable(conn, "data_scaling"), TRUE)
-  try(DBI::dbRemoveTable(conn, "pred_cache"), TRUE)
-  
-  seed_start_date <- pred_start_date - config$history_window - 1L
-  seed_end_date <- pred_start_date - 1L
-  all_seed_dates <- seq.Date(from = seed_start_date, to = seed_end_date, by = 1L)
-  
-  seed_data <- list(cbc = NULL, census = NULL, transfusion = NULL, surgery = NULL, inventory = NULL)
-  
-  for (i in seq_along(all_seed_dates)) {
-    date_str <- as.character(all_seed_dates[i])
-    data_single_day <- process_data_for_date(config = config, date = date_str) # include create_cbc_features in here
-    
-    # Is there a way around this rbind?
-    seed_data$cbc %<>% rbind(data_single_day$cbc)
-    seed_data$census %<>% rbind(data_single_day$census)
-    seed_data$surgery %<>% rbind(data_single_day$surgery)
-    seed_data$transfusion %<>% rbind(data_single_day$transfusion)
-    seed_data$inventory %<>% rbind(data_single_day$inventory)
-    
-  }
-  
-  # Write a table for every type of data file in the seed window
-  for (i in seq_along(seed_data)) {
-    table_name <- names(seed_data)[i]
-    dplyr::copy_to(conn, data.frame(seed_data[[table_name]], check.names = FALSE), 
-                   name = table_name, 
-                   overwrite = TRUE,
-                   temporary = FALSE)
-  }
-}
-
-# Helper function to obtain a list of unique dates in the folder following each filename pattern
-gather_dates_by_pattern <- function(data_folder, pattern) {
-  files <- list.files(path = data_folder, pattern = pattern, full.names = TRUE)
-
-  # Extract the date from each filename (assume date immediately follows pattern in YYYY-MM-DD format)
-  dates <- sapply(files, function(x) {
-    date <- substring(x, first = stringr::str_length(data_folder) + stringr::str_length(pattern) + 1L, 
-                      last = stringr::str_length(data_folder) + stringr::str_length(pattern) + 10L)
-    })
-  unique(dates)
-}
-
 #' Preprocess all available files and add to database
 #'
 #' @param conn the active database connection object 
@@ -78,7 +12,7 @@ gather_dates_by_pattern <- function(data_folder, pattern) {
 #' @importFrom magrittr %<>%
 #' @importFrom dplyr copy_to
 #' @export
-sbc_build_and_save_full_db <- function(conn, config, updateProgress = NULL) {
+build_and_save_database <- function(conn, config, updateProgress = NULL) {
   
   if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
   
@@ -154,7 +88,7 @@ sbc_build_and_save_full_db <- function(conn, config, updateProgress = NULL) {
 #' @importFrom loggit loggit
 #' @importFrom DBI dbDisconnect dbIsValid
 #' @export
-sbc_predict_for_range_db <- function(conn, pred_start_date, num_days, config, updateProgress = NULL) {
+predict_usage_over_range <- function(conn, pred_start_date, num_days, config, updateProgress = NULL) {
   
   if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
   
@@ -166,7 +100,7 @@ sbc_predict_for_range_db <- function(conn, pred_start_date, num_days, config, up
   for (i in seq_along(all_pred_dates)) {
     date_str <- as.character(all_pred_dates[i])
     loggit::loggit(log_lvl = "INFO", log_msg = paste0("Predicting for date: ", date_str))
-    result <- conn %>% predict_for_date_db(config = config, date = date_str)
+    result <- conn %>% predict_for_date(config = config, date = date_str)
     prediction_df <- rbind(prediction_df,result)
     
     if (is.function(updateProgress)) {
@@ -200,7 +134,7 @@ sbc_predict_for_range_db <- function(conn, pred_start_date, num_days, config, up
 #' @importFrom tibble as_tibble
 #' @importFrom DBI dbDisconnect dbIsValid dbListTables
 #' @export
-build_prediction_table_db <- function(conn, 
+build_prediction_table <- function(conn, 
                                       config, 
                                       start_date, 
                                       end_date = Sys.Date() + 2,
@@ -331,10 +265,15 @@ build_prediction_table_db <- function(conn,
   pred_table %>%
     dplyr::mutate(`True Waste` = pip::pos(.data$`Inv. expiring in 1 day` - .data$`Platelet usage`)) %>%
     dplyr::mutate(`Fresh Units Collected` = ifelse(dplyr::lead(.data$`Inv. expiring in 2 days`, 1) > 0, 
-                                                  pip::pos((dplyr::lead(.data$`Inv. count`, 1) - dplyr::lead(.data$`Inv. expiring in 2+ days`, 1)) - ((.data$`Inv. count` - .data$`Inv. expiring in 2+ days`) -.data$`Platelet usage` - .data$`True Waste`)),
-                                                  pip::pos((dplyr::lead(.data$`Inv. expiring in 1 day`, 1) - ((.data$`Inv. count` - .data$`Inv. expiring in 2+ days`) -.data$`Platelet usage` - .data$`True Waste`)))) # Largest value it could possibly be
+                                                  pip::pos((dplyr::lead(.data$`Inv. count`, 1) - 
+                                                              dplyr::lead(.data$`Inv. expiring in 2+ days`, 1)) - 
+                                                             ((.data$`Inv. count` - .data$`Inv. expiring in 2+ days`) -
+                                                                .data$`Platelet usage` - .data$`True Waste`)),
+                                                  pip::pos((dplyr::lead(.data$`Inv. expiring in 1 day`, 1) - 
+                                                              ((.data$`Inv. count` - .data$`Inv. expiring in 2+ days`) -
+                                                                 .data$`Platelet usage` - .data$`True Waste`)))) # Largest value it could possibly be
                   ) %>%
-    dplyr::mutate(`True Shortage` = pip::pos(.data$`Platelet usage` - (.data$`Inv. count` - `Inv. expiring in 2+ days`) - .data$`Fresh Units Collected`)) ->
+    dplyr::mutate(`True Shortage` = pip::pos(.data$`Platelet usage` - (.data$`Inv. count` - .data$`Inv. expiring in 2+ days`) - .data$`Fresh Units Collected`)) ->
     pred_table
   
   pred_table
@@ -353,7 +292,7 @@ build_prediction_table_db <- function(conn,
 #' @importFrom dplyr relocate tbl select collect
 #' @importFrom magrittr %>%
 #' @export
-build_coefficient_table_db <- function(conn, pred_start_date, num_days) {
+build_coefficient_table <- function(conn, pred_start_date, num_days) {
   # Collect model coefficients over all output files (only need one set per week)
   
   if (!DBI::dbIsValid(conn)) stop("Database connection is invalid. Please reconnect.")
@@ -385,7 +324,7 @@ build_coefficient_table_db <- function(conn, pred_start_date, num_days) {
 #' @return a vector of losses computed for each hyperparameter
 #' @importFrom dplyr lead
 #' @importFrom pip pos
-compute_proxy_loss <- function(w, r1, r2, penalty_factor, c0) {
+compute_real_loss <- function(w, r1, r2, penalty_factor, c0) {
   
   if (nrow(w) != nrow(r1) || nrow(w) != nrow(r2)) {
     stop("Waste, inventory, and/or shortage vectors of different lengths.")
@@ -519,12 +458,12 @@ prediction_error <- function(pred_table, config) {
 
 #' Combine projection loss and prediction error calculation into a single evaluation.
 #'
-#' @param pred_table, the prediction table generated from SBCpip::build_prediction_table
+#' @param pred_table, the prediction table generated from build_prediction_table
 #' @param config the site-specific configuration
 #' @return a list containing a summary of the projection loss and prediction error (i.e.
 #'         the overall efficacy of the model)
 #' @export
-pred_table_analysis <- function(pred_table, config) {
+analyze_prediction_table <- function(pred_table, config) {
   initial_mask <- seq_len(config$start + 5L)
   final_mask <- (nrow(pred_table) - 2L):nrow(pred_table)
   
@@ -543,7 +482,7 @@ pred_table_analysis <- function(pred_table, config) {
 
 #' Combine projection loss and prediction error calculation into a single evaluation.
 #'
-#' @param coef_table, the coefficient table generated from SBCpip::build_coefficient_table
+#' @param coef_table, the coefficient table generated from build_coefficient_table
 #' @param config the site-specific configuration
 #' @param top_n the number of coefficients that are reported in the table
 #' @return a list containing the top 20 coefficient by sum of magnitudes over the analyzed period, 
@@ -552,7 +491,7 @@ pred_table_analysis <- function(pred_table, config) {
 #' @importFrom tidyr pivot_longer 
 #' @importFrom dplyr desc
 #' @export
-coef_table_analysis <- function(coef_table, config, top_n = 25L) {
+analyze_coef_table <- function(coef_table, config, top_n = 25L) {
   dows <- c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
   # sum the absolute values of all of the coefficients (except intercept). 
   # Display 20 coefficients in order of largest absolute sums and state average value over period

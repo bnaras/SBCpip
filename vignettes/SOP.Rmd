@@ -1,18 +1,18 @@
 ---
 title: "Stanford Blood Center Operating Procedures"
 author: "Balasubramanian Narasimhan, Kai Eiji Okada"
-date: "`r Sys.Date()`"
+date: '`r Sys.Date()`'
 output:
-  pdf_document: default
+  html_document:
+      toc: yes
+      toc_float: true
+      toc_depth: 2
   fig_caption: yes
   theme: cerulean
-  toc: yes
-  toc_depth: 2
-  html_document: null
 bibliography: platelet.bib
-vignette: |
-  %\VignetteIndexEntry{Stanford Blood Center Operating Procedures} 
-  %\VignetteEngine{knitr::rmarkdown} 
+vignette: >
+  %\VignetteEngine{knitr::knitr}
+  %\VignetteIndexEntry{Vignette Title}
   \usepackage[utf8]{inputenc}
 ---
 
@@ -39,15 +39,16 @@ make use of many other features besides those used in the reference. `SBCpip`
 also offers many options for site-specific feature customization out of the box.
 
 
-# Main Contents of this Package 
+<!-- # Main Contents of this Package 
 
-* `R/sbc_globals.R`: Defines the global config object, which contains default values for various model parameters. Includes functions to get and set config values.
-* `R/prediction_wrapper.R`: Contains higher level functions that loop over the main functions described in `R/process_data.R` to process data files and generate predictions for a range of dates. Also includes functions that summarize predictions and model coefficients in a tabular format in order to analyze model performance.
-* `R/process_data.R`: Contains lower-level functions to preprocess input to the model and generate predictions. In particular, `SBCpip::process_data_for_date_db` reads in the appropriate data files for each date and inserts/updates relevant data to a local DuckDB database. `SBCpip::predict_for_date_db` reads preprocessed data for a range of dates from the database and generates a usage prediction for the next three days. Critically, all calls to the `pip` package are made from the function defined in this file.
-* `R/webapps.R`: Defines the function `SBCpip::sbc_dashboard()` which initializes the SBCpip Shiny Dashboard. The full dashboard code is contained in `inst/webapps/dashboard/app.R`.
-* `R/utilities.R`: Defines common helper functions for the above files.
-* `inst/extdata/sbc_data_mapping.csv`: Contains a table which the user must complete to map organization-specific data fields to those utilized by the Stanford Blood Center.
-* `inst/extdata/cbc_thresholds.csv`: Contains a table which the user must complete to map organization-specific CBC statistics (abnormalities and quantiles) to those utilized by the Stanford Blood Center (see **Data Preparation** section below).
+<!-- * `R/sbc_globals.R`: Defines the global config object, which contains default values for various model parameters. %Includes functions to get and set config values.
+<!-- * `R/prediction_wrapper.R`: Contains higher level functions that loop over the main functions described in  
+<!-- * `R/process_data.R` to process data files and generate predictions for a range of dates. Also includes functions that %summarize predictions and model coefficients in a tabular format in order to analyze model performance.
+<!-- * `R/process_data.R`: Contains lower-level functions to preprocess input to the model and generate predictions. In particular, `SBCpip::process_data_for_date_db` reads in the appropriate data files for each date and inserts/updates relevant data to a local DuckDB database. `SBCpip::predict_for_date_db` reads preprocessed data for a range of dates from the database and generates a usage prediction for the next three days. Critically, all calls to the `pip` package are made from the function defined in this file.
+<!-- * `R/webapps.R`: Defines the function `SBCpip::sbc_dashboard()` which initializes the SBCpip Shiny Dashboard. The full dashboard code is contained in `inst/webapps/dashboard/app.R`.
+<!-- * `R/utilities.R`: Defines common helper functions for the above files.
+<!-- * `inst/extdata/sbc_data_mapping.csv`: Contains a table which the user must complete to map organization-specific data %fields to those utilized by the Stanford Blood Center.
+<!-- * `inst/extdata/cbc_thresholds.csv`: Contains a table which the user must complete to map organization-specific CBC %statistics (abnormalities and quantiles) to those utilized by the Stanford Blood Center (see **Data Preparation** section below). -->
 
 \pagebreak
 
@@ -67,7 +68,7 @@ template `sbc_data_mapping.csv` and CBC parsing template `cbc_thresholds.csv`
 (see "Data Preparation" section below).
 2. **Build Seed Database:** Set appropriate database configurations and build a 
 DuckDB database with observed variables and responses (platelet usage). This is 
-accomplished using `SBCpip::sbc_build_and_save_full_db`. This will convert data 
+accomplished using `build_and_save_database`. This will convert data 
 files to an easily ingestible format and restrict model input to variables of 
 interest (see "Database Structure" section for more details). Configurations 
 can be set either through the Shiny interface or by adjusting the config object. 
@@ -81,13 +82,13 @@ object (see "Model Behaviot and Configuration" section).
 4. **Validate Model:** Validate the model on previous blood product usage. This 
 will allow the user to evaluate the model's performance on recent data and make 
 any necessary adjustments to model configurations before making projections based 
-on new data. This is accomplished using `SBCpip::sbc_predict_for_range_db`. After 
+on new data. This is accomplished using `predict_usage_over_range`. After 
 predictions have been generated, the user can build a table of inventory levels, 
-waste, and shortage over the validation period using `SBCpip::build_prediction_table` 
-and obtain summary statistics using `SBCpip::pred_table_analysis`. Similarly, 
+waste, and shortage over the validation period using `build_prediction_table` 
+and obtain summary statistics using `analyze_prediction_table`. Similarly, 
 the user can also build a table of the most prominent features used by the model 
-in making predictions over the validation period using `SBCpip::build_coefficient_table` 
-and obtain a summary using `SBCpip::coef_table_analysis`. All of these functions 
+in making predictions over the validation period using `build_coefficient_table` 
+and obtain a summary using `analyze_coef_table`. All of these functions 
 are performed automatically for the user via the Shiny dashboard interface.
 5. **Predict for New Data:** The user adds data files for a new date to the specified
 data folder. Then based on observed input data and platelet usage 
@@ -106,7 +107,7 @@ section. For notes on using the point-and-click interface, please refer to the
 
 To build the seed database, begin by attaching the `SBCpip` library.
 
-```{r}
+```{r, eval = FALSE}
 library(SBCpip)
 options(warn = 1) ## Report warnings as they appear
 ```
@@ -143,7 +144,7 @@ set_config_param(param = "inventory_filename_prefix", # actual inventory levels
 ```
 
 Next, make sure to align the column headers in the organization's site-specific 
-data files with corresponding SBC fields using `SBCpip::set_org_col_params` 
+data files with corresponding SBC fields using `set_org_col_params` 
 (see Step 1 above and **Data Preparation** section).
 ```{r, eval = FALSE}
 set_org_col_params()
@@ -184,15 +185,7 @@ set_config_param(param = "database_path",
 ## Create a database connection and then build the full database. This allows
 ## the clean database to persist as a local file after the connection is closed.
 db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
-db %>% sbc_build_and_save_full_db(config)
-db %>% DBI::dbDisconnect(shutdown = TRUE)
-
-## You can also build the database based on a particular prediction start dates.
-## This fills the database with data files prior to the given date.
-db <- DBI::dbConnect(duckdb::duckdb(), config$database_path, read_only = FALSE)
-pred_start_date <- as.Date('2020-06-20')
-
-db %>% sbc_build_and_save_seed_db(pred_start_date, config)
+db %>% sbc_build_and_save_datbase(config)
 db %>% DBI::dbDisconnect(shutdown = TRUE)
 
 ```
@@ -229,18 +222,18 @@ pred_end_date <- pred_start_date + num_days
 
 ## Predict using default model settings
 prediction <- db %>% 
-  sbc_predict_for_range_db(pred_start_date, num_days, config)
+  predict_usage_over_range(pred_start_date, num_days, config)
 
 ## Build a table of predictions against the actual usage
-full_pred_table_db <- db %>%
-  build_prediction_table_db(config, pred_start_date, pred_end_date)
+full_pred_table <- db %>%
+  build_prediction_table(config, pred_start_date, pred_end_date)
 
 ## Now we can analyze the amount of waste, shortage, and prediction error
-full_pred_tabl_db %>% pred_table_analysis(config)
+full_pred_table %>% analyze_prediction_table(config)
 
 ## ... and also look at prominent features used during the prediction range
-db %>% build_coefficient_table_db(start_date, num_days) %>%
-          coef_table_analysis()
+db %>% build_coefficient_table(start_date, num_days) %>%
+          analyze_coef_table()
 
 ```
 
@@ -279,7 +272,7 @@ The default daily routine makes the assumption that
 More specifically, this routine assumes that early on day i + 1, the user adds 
 the 5 data files (CBC, Census, Surgery, Transfusion, Inventory) for day i to the 
 data folder specified in `config` and makes a prediction of combined future usage 
-on day i + 1, i + 2, and i + 3. `SBCpip::predict_for_date_db` adds the data for
+on day i + 1, i + 2, and i + 3. `predict_for_date` adds the data for
 the new date to the DuckDB database so that it can be used for future predictions.
 
 Note that as in the model validation case, 
@@ -291,11 +284,11 @@ day_iplus1 <- "2021-01-01"
 
 ## Returns a tibble with date = the current date and t_pred = number of 
 ## platelets used over next three days
-result <- db %>% predict_for_date_db(config = config)
+result <- db %>% predict_for_date(config = config)
 
 ## Returns a tibble with date = the specified date and t_pred = number of 
 ## platelets used over next three days
-result <- db %>% predict_for_date_db(config = config, date = day_iplus1)
+result <- db %>% predict_for_date(config = config, date = day_iplus1)
 ```
 
 We not only want to predict usage for the next three days, but also generate
@@ -463,7 +456,7 @@ The local DuckDB database created by the SBCpip code at the path specified by th
 
 Note that in order to ensure consistency between the data in each of these tables, 
 only rows for which all 5 file types exist in the folder for a given date will be 
-added to any table. The function `SBCpip::process_data_for_date` serves as a 
+added to any table. The function `process_data_for_date` serves as a 
 gatekeeper in this respect.
 
 When each prediction is made, we join rows from the 5 tables above and create 
@@ -478,10 +471,10 @@ determine whether the model should retrain under the current regime given
 An additional `data_scaling` table is used to store the current data scales (variance) 
 and centers (mean) to standardize the data before it is input to the model. 
 
-To summarize: After running `SBCpip::sbc_build_and_save_full_db()` on the database,
+To summarize: After running `build_and_save_database()` on the database,
 it should contain the tables `cbc`, `census`, `inventory`, `surgery`, `transfusion`
 (use `DBI::dbListTables()` to confirm that this is the case). After subsequently running
-`SBCpip::sbc_predict_for_range_db` or `SBCpip::predict_for_date_db` should also
+`predict_usage_over_range` or `predict_for_date` should also
 contain the tables `model`, `pred_cache`, and `data_scaling`.
 
 \pagebreak
