@@ -931,7 +931,7 @@ process_data_for_date <- function(config,
     if (length(census_file) != 1L) stop("Too few or too many census files matching patterns!")
     if (length(surgery_files) != 3L) stop("Too few or too many surgery files matching patterns!")
     if (length(transfusion_file) != 1L) stop("Too few or too many transfusion files matching patterns!")
-    if (length(inventory_file) > 1L) stop("Too few or too many files matching patterns!")
+    if (length(inventory_file) != 1L) stop("Too few or too many inventory files matching patterns!")
 
     # Process CBC data
     cbc_data <- read_one_cbc_file(cbc_file,

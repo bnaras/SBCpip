@@ -32,6 +32,8 @@ build_and_save_database <- function(conn, config, updateProgress = NULL) {
   
   # Make sure we have files that are contiguous in time. Break at the first non-contiguous point
   cut_point <- length(all_dates)
+  if (length(all_dates) < 1) stop("No data found")
+  
   for (i in seq_len(length(all_dates) - 1L)) {
     if (as.Date(all_dates[i]) + 1 != as.Date(all_dates[i + 1L])) {
       cut_point <- i
@@ -359,7 +361,7 @@ projection_loss <- function(pred_table, config) {
   last_day <- nrow(pred_table) - 3L
   pred_table_trunc <- pred_table[seq(first_day, last_day), , drop = FALSE]
   
-  loss <- compute_proxy_loss(w = matrix(pred_table_trunc$Waste, ncol = 1),
+  loss <- compute_real_loss(w = matrix(pred_table_trunc$Waste, ncol = 1),
                              r1 = matrix(pred_table_trunc$`No. expiring in 1 day`, ncol = 1),
                              r2 = matrix(pred_table_trunc$`No. expiring in 2 days`, ncol = 1),
                              penalty_factor = config$penalty_factor,
@@ -392,7 +394,7 @@ real_loss <- function(pred_table, config) {
     pred_table_trunc$`Platelet usage`
   
   
-  loss <- compute_proxy_loss(w = matrix(pred_table_trunc$`True Waste`, ncol = 1),
+  loss <- compute_real_loss(w = matrix(pred_table_trunc$`True Waste`, ncol = 1),
                              r1 = matrix(remaining_inventory, ncol = 1),
                              r2 = matrix(remaining_inventory, ncol = 1), 
                              penalty_factor = config$penalty_factor,
