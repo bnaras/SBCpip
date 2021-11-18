@@ -199,11 +199,6 @@ body <- dashboardBody(
     )
     , tabItem(tabName = "data_settings"
               , h2("Database Settings")
-              , h5("Once you have updated sbc_data_mapping.csv and cbc_thresholds.csv, and set your
-                    Input and Output locations and Filename Patterns, click \"Refresh Features\" to
-                    grab a list of features from each data file. Then select the features you would like
-                    to use and click \"Save Features\" to preserve these for future use. If you have already
-                    done these steps, click \"Load Features\" to set the previously saved feature set.")
               , fluidRow(
                 box(
                   h3("File Settings")
