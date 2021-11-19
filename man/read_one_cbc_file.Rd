@@ -29,3 +29,10 @@ a list of four items, filename, raw_data (tibble), report a
 \description{
 Read a single cbc file data and return it, as is
 }
+\examples{
+config <- SBCpip::get_SBC_config()
+filename <- system.file("extdata", "platelet_data_sample", 
+                        "Hospital_Daily_CBC2020-05-02-fake.csv",
+                        package = "SBCpip")
+cbc_data <- read_one_cbc_file(filename, config$cbc_abnormals, config$cbc_vars)
+}

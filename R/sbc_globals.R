@@ -46,20 +46,20 @@ SBC_config <- function() {
                              "General", 
                              "Interventional Radiology"), # Counts of types of surgeries conducted (OR_SERVICE)
         c0 = 10, ## value for c0 to use in training model
-        min_inventory = 30, ## the minimum inventory
-        history_window = 200,  ## how many days to use in training
+        history_window = 100,  ## how many days to use in training
         penalty_factor = 15,   ## penalty factor to use in training
         prediction_bias = 10,    ## inventory count below which we penalize result 
         start = 10, ## the day we start the model evaluation
         initial_collection_data = c(60, 60, 60), ## the initial number that will be collected for the first three days
         initial_expiry_data = c(0, 0), ## the number of units that expire a day after, and two days after respectively
-        data_folder = "E:/platelet_predict_daily_data", ## Shared folder for Blood Center
-        database_path =  "E:/database.duckdb", 
-        cbc_filename_prefix = "LAB-BB-CSRP-CBC_Daily",
-        census_filename_prefix = "LAB-BB-CSRP-Census_Daily",
-        transfusion_filename_prefix = "LAB-BB-CSRP-Transfused Product Report_Daily",
-        inventory_filename_prefix = "Daily_Product_Inventory_Report_Morning_To_Folder",
-        surgery_filename_prefix = "LAB-BB-CSRP-Surgery_Daily",
+        min_inventory = 0,
+        data_folder = "home/app/platelet_data_sample", ## Shared folder for Blood Center
+        database_path =  "home/app/database.duckdb", 
+        cbc_filename_prefix = "Hospital_Daily_CBC",
+        census_filename_prefix = "Hospital_Daily_Census",
+        transfusion_filename_prefix = "Hospital_Daily_Transfusion",
+        inventory_filename_prefix = "Daily_Morning_Inventory",
+        surgery_filename_prefix = "Hospital_Daily_Surgery",
         log_filename_prefix = "SBCpip_%s.json",
         model_update_frequency = 7L, ## every 7 days
         lag_window = 7L,             ## number of previous days to average in smoothing
@@ -72,7 +72,7 @@ SBC_config <- function() {
         org_inventory_cols = c("Inv. ID", "Type", "Days to Expire", "Exp. Date", "Exp. Time")   ## organization's relevant Inventory column headers
     )
     result$cbc_vars <- names(result$cbc_quantiles)[seq_len(9L)] ## Ignore HCT
-    result$log_folder <- "E:/Blood_Center_Logs"
+    result$log_folder <- "home/app/platelet_logs"
     result
 }
 
@@ -211,7 +211,8 @@ set_initial_collection_data <- function(value) {
 #'
 set_org_col_params <- function() {
   data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
-  data_mapping_file <- system.file("extdata", "sbc_data_mapping.csv", package = "SBCpip")
+  data_mapping_file <- system.file("extdata", "sbc_data_mapping.csv", 
+                                   package = "SBCpip", mustWork = TRUE)
   sapply(data_tables, function(table_name) {
     data_mapping <- utils::read.csv(data_mapping_file)
     invisible(set_config_param(sprintf("org_%s_cols", table_name),

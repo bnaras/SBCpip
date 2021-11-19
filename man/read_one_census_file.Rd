@@ -24,3 +24,10 @@ a list of four items, filename, raw_data (tibble), report a
 \description{
 Read a single census file data and return it, as is
 }
+\examples{
+config <- get_SBC_config()
+filename <- system.file("extdata", "platelet_data_sample", 
+                        "Hospital_Daily_Census2020-05-02-fake.csv",
+                        package = "SBCpip")
+cbc_data <- read_one_cbc_file(filename, config$census_locations)
+}

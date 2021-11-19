@@ -8,8 +8,10 @@ library(bibtex)
 library(DBI)
 library(duckdb)
 library(scales)
+library(shinyBS) 
 
-paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", package = "SBCpip"))
+paper_citation <- bibtex::read.bib(system.file("extdata", "platelet.bib", 
+                                               package = "SBCpip", mustWork = TRUE))
 data_tables <-   data_tables <- c("cbc", "census", "surgery", "transfusion", "inventory")
 
 ## Initialization code
@@ -20,10 +22,13 @@ SBCpip::set_org_col_params()
 ## Read column mappings from the sbc_data_mapping file.
 
 ## Set config params for cbc quantiles and abnormals
-cbc_threshold_file <- system.file("extdata", "cbc_thresholds.csv", package = "SBCpip")
+cbc_threshold_file <- system.file("extdata", "cbc_thresholds.csv",
+                                  package = "SBCpip", mustWork = TRUE)
 cbc_thresholds <- read.csv(cbc_threshold_file)
-cbc_quantiles_tbl <- cbc_thresholds %>% dplyr::filter(metric == "quantile")
-cbc_abnormals_tbl <- cbc_thresholds %>% dplyr::filter(metric == "abnormal")
+cbc_quantiles_tbl <- cbc_thresholds %>% 
+  dplyr::filter(metric == "quantile")
+cbc_abnormals_tbl <- cbc_thresholds %>% 
+  dplyr::filter(metric == "abnormal")
 
 ## Helper to convert CBC quantiles from external table to the appropriate config functions
 cbc_quantile_to_function <- function(component, table) {
@@ -195,11 +200,10 @@ body <- dashboardBody(
     )
     , tabItem(tabName = "data_settings"
               , h2("Database Settings")
-              , h5("Once you have updated sbc_data_mapping.csv and cbc_thresholds.csv, and set your
-                    Input and Output locations and Filename Patterns, click \"Refresh Features\" to
-                    grab a list of features from each data file. Then select the features you would like
-                    to use and click \"Save Features\" to preserve these for future use. If you have already
-                    done these steps, click \"Load Features\" to set the previously saved feature set.")
+              , h5("1. Set file parameters in the left column, then click 'Save File Settings'")
+              , h5("2. Pull in list of possible features from data files using 'Refresh Features'")
+              , h5("3. Select relevant features in the right column, then click 'Save Features'")
+              , h5("4. Click 'Apply Database Settings', then click 'Build Database'")
               , fluidRow(
                 box(
                   h3("File Settings")
@@ -208,17 +212,32 @@ body <- dashboardBody(
                     , actionButton(inputId = "loadFileSettings", label = "Load File Settings")
                   )
                   , h3("Input and Output Locations")
-                  , textInput(inputId = "database_path", label = "Database Path", value = "E:/database.duckdb")
-                  , textInput(inputId = "data_folder", label = "Data Folder", value = "E:/platelet_predict_daily_data")
-                  , textInput(inputId = "log_folder", label = "Log Folder", value = "E:/Blood_Center_Logs")
+                  , textInput(inputId = "database_path", label = "Database Path", 
+                              value = SBCpip::get_SBC_config()$database_path)
+                  , textInput(inputId = "data_folder", label = "Data Folder", 
+                              value = SBCpip::get_SBC_config()$data_folder)
+                  , textInput(inputId = "log_folder", label = "Log Folder", 
+                              value = SBCpip::get_SBC_config()$log_folder)
                   
                   , h3("Filename Patterns")
-                  , textInput(inputId = "cbc_filename_prefix", label = "CBC Files", value = SBCpip::get_SBC_config()$cbc_filename_prefix)
-                  , textInput(inputId = "census_filename_prefix", label = "Census Files", value = SBCpip::get_SBC_config()$census_filename_prefix)
-                  , textInput(inputId = "transfusion_filename_prefix", label = "Transfusion Files", value = SBCpip::get_SBC_config()$transfusion_filename_prefix)
-                  , textInput(inputId = "surgery_filename_prefix", label = "Surgery Files", value = SBCpip::get_SBC_config()$surgery_filename_prefix)
-                  , textInput(inputId = "inventory_filename_prefix", label = "Inventory Files", value = SBCpip::get_SBC_config()$inventory_filename_prefix)
-                  , textInput(inputId = "log_filename_prefix", label = "Log Files", value = SBCpip::get_SBC_config()$log_filename_prefix)
+                  , textInput(inputId = "cbc_filename_prefix", 
+                              label = "CBC Files", 
+                              value = SBCpip::get_SBC_config()$cbc_filename_prefix)
+                  , textInput(inputId = "census_filename_prefix", 
+                              label = "Census Files", 
+                              value = SBCpip::get_SBC_config()$census_filename_prefix)
+                  , textInput(inputId = "transfusion_filename_prefix", 
+                              label = "Transfusion Files", 
+                              value = SBCpip::get_SBC_config()$transfusion_filename_prefix)
+                  , textInput(inputId = "surgery_filename_prefix", 
+                              label = "Surgery Files", 
+                              value = SBCpip::get_SBC_config()$surgery_filename_prefix)
+                  , textInput(inputId = "inventory_filename_prefix", 
+                              label = "Inventory Files", 
+                              value = SBCpip::get_SBC_config()$inventory_filename_prefix)
+                  , textInput(inputId = "log_filename_prefix", 
+                              label = "Log Files", 
+                              value = SBCpip::get_SBC_config()$log_filename_prefix)
                 )
                 , box(
                   h3("Feature Names")
@@ -245,38 +264,7 @@ body <- dashboardBody(
     )
     , tabItem(tabName = "model_settings"
               , fluidRow(
-                h2("Configuration Settings")
-                , HTML("<ul>
-                    <li><strong>Minimum Remaining Fresh Units at EOD [<em>c0</em>]:</strong> Ensures that hospital inventory 
-                      levels remain reasonably high at the end of the day. Raising this value will
-                      bias the model's predictions upward.</li>
-                    <li><strong>Prediction Error Bias [<em>b</em>]:</strong> This positive bias allows selection of
-                      model hyperparameters that avoid negative prediction errors, which typically result in shortage. 
-                      This value should be similar to c0 above.</li>
-                    <li><strong>Shortage Penalty Factor [<em>pi</em>]:</strong> How much we prioritize minimizing shortage
-                      over wastage. Impact tends to be lower than that of c0 and b, but it
-                      should be kept high to avoid shortage where possible.</li>
-                    <li><strong>History Window:</strong> The number of previous days we consider in retraining the model. We
-                      ignore the first [Skip Initial] + 5 days in the window during training time. Larger history windows will tend
-                      to produce more conservative / higher usage predictions and can lead to increased waste, and smaller
-                      windows will tend to reduce waste but increase the risk of shortage.</li>
-                    <li><strong>Lag Window:</strong> The number of previous days we average over in computing the lagged
-                      platelet usage feature. This should be at least 7 days to incorporate information from the previous
-                      week.</li> 
-                    <li><strong>Skip Initial:</strong> The number of initial days we skip in training and evaluating the
-                      model. The effective training window is the previous [History Window] - [Skip Initial] - 5 days.
-                      Similarly, when we validate the model over n days, the number of days during which we record waste
-                      and shortage is n - [Skip Initial] - 7 days.</li>
-                    <li><strong>Model Update Frequency:</strong> How often we retrain the model when predicting over
-                      a range of dates (recommended 7 days).</li>
-                    <li><strong>Range of L1 Bounds on Model Coefs:</strong> This restricts the size of covariate coefficients
-                      using L1-regularization, resulting in sparse models. The model uses cross-validation to select an
-                      appropriate L1 Bound in the range during each retraining step. 0-60 is sufficient for most applications [The lower
-                      bound should ideally be 0 in order to take full advantage of model sparsity].</li>
-                    <li><strong>Bound on Lagged Usage:</strong> Occasionally it is helpful to also restrict the influence of the
-                      previous usage to focus on other features that might cause a break in the pattern. The model uses
-                      cross-validation to determine whether the magnitude of this coefficient should be clipped to the given value.</li>
-                  </ul>")
+                h2("Model Configuration Settings")
                 , box(
                   h3("Inventory Requirements for Model")
                   , sliderInput(inputId = "c0"
@@ -284,16 +272,19 @@ body <- dashboardBody(
                                 , min = 0
                                 , max = 50
                                 , value = get_SBC_config()$c0)
+                  , shinyBS::bsTooltip(id = "c0", title = "Raising this value biases predictions upward.", placement = "top", trigger = "hover", options = NULL)
                   , sliderInput(inputId = "prediction_bias"
                                 , label = "Prediction Error Bias [b] (units):"
                                 , min = 0
                                 , max = 100
                                 , value = get_SBC_config()$prediction_bias)
+                  , shinyBS::bsTooltip(id = "prediction_bias", title = "This value should be similar to c0 above. Adds positive bias to prediction errors.", placement = "top", trigger = "hover", options = NULL)
                   , sliderInput(inputId = "penalty_factor"
                                 , label = "Shortage Penalty Factor [pi] (X units Wasted : 1 unit Short):"
                                 , min = 0
                                 , max = 20
                                 , value = get_SBC_config()$penalty_factor)
+                  , shinyBS::bsTooltip(id = "penalty_factor", title = "Amount by which we prioritize minimizing shortage over wastage.", placement = "top", trigger = "hover", options = NULL)
                 )
                 , box(
                   h3("Other Model Fitting Parameters")
@@ -302,32 +293,32 @@ body <- dashboardBody(
                                 , min = 50
                                 , max = 300
                                 , value = 100)
-                  , sliderInput(inputId = "lag_window"
-                                , label = "Moving Average Lag Window (days)"
-                                , min = 1
-                                , max = 14
-                                , value = 7)
+                  , shinyBS::bsTooltip(id = "history_window", title = "Larger windows will produce more conservative predictions, leading to more waste.", placement = "top", trigger = "hover", options = NULL)
                   , sliderInput(inputId = "start"
                                 , label = "Skip Initial (days):"
                                 , min = 1
                                 , max = 15
                                 , value = 10)
+                  , shinyBS::bsTooltip(id = "start", title = "The effective training window is the previous [History Window] - [Skip Initial] - 5 days", placement = "top", trigger = "hover", options = NULL)
                   , sliderInput(inputId = "model_update_frequency"
                                 , label = "Model Update Frequency (days):"
                                 , min = 1
                                 , max = 30
                                 , value = 7)
+                  , shinyBS::bsTooltip(id = "model_update_frequency", title = "How often the model retrains during validation on past data and prediction on new data.", placement = "top", trigger = "hover", options = NULL)
                   , sliderInput(inputId = "l1_bound_range"
                                 , label = "Range of L1 Bounds on Model Coefs:"
                                 , min = 0
                                 , max = 200
                                 , value = c(0, 60)
                                 , step = 2)
+                  , shinyBS::bsTooltip(id = "l1_bound_range", title = "Range of hyperparameters searched in Cross Validation to determine sparsity of covariates in model", placement = "top", trigger = "hover", options = NULL)
                   , sliderInput(inputId = "lag_bound"
                                 , label = "Bound on Lagged Usage:"
                                 , min = 5
                                 , max = 20
                                 , value = 10)
+                  , shinyBS::bsTooltip(id = "lag_bound", title = "Additional bound on the influence of prior platelet usage. Cross validation determines whether or not this bound should be applied.", placement = "top", trigger = "hover", options = NULL)
                 )
               )
     )
@@ -389,9 +380,10 @@ body <- dashboardBody(
 )
 
 dbHeader <- dashboardHeader()
-logo_src <- system.file("webapps", "dashboard", "assets", "sbc.png", package = "SBCpip")
+logo_src <- system.file("webapps", "dashboard", "assets", "sbc.png", 
+                        package = "SBCpip", mustWork = TRUE)
 dbHeader$children[[2]]$children <-  tags$a(href='https://stanfordbloodcenter.org',
-                                           tags$img(src = 'https://sbcdonor.org/client_assets/images/logos/logo_stanford.png',
+                                           tags$img(src = logo_src,
                                                     alt = 'Stanford Blood Center Dashboard', height = '40'))
 
 ui <- dashboardPage(
@@ -475,9 +467,6 @@ server <- function(input, output, session) {
     sapply(all_file_settings(), function(x) {
       SBCpip::set_config_param(x, input[[x]])
     })
-
-    # log_folder
-    loggit::set_logfile(paste0(input$log_folder, sprintf(input$log_filename_prefix, Sys.Date())))
   })
   
   observeEvent(input$saveFileSettings, {
@@ -487,9 +476,14 @@ server <- function(input, output, session) {
     file_settings <- lapply(all_file_settings(), function(x) input[[x]])
     names(file_settings) <- all_file_settings()
     
+    package.path <- find.package("SBCpip",
+                                 lib.loc = NULL, quiet = FALSE,
+                                 verbose = getOption("verbose"))
+    destination.path <- file.path(package.path,
+                                  "user_settings", "file_settings.rds")
+    
     result <- tryCatch(saveRDS(file_settings, 
-                               file = file.path(config$data_folder, 
-                                                "file_settings.rds")),
+                               file = destination.path),
                        warning = function(e) {
                          shinyalert::shinyalert("Oops!", "Saving failed. Make sure you have entered the correct data folder.")
                          simpleWarning(e)$message
@@ -502,9 +496,14 @@ server <- function(input, output, session) {
   
   observeEvent(input$loadFileSettings, {
     
-    file_settings <- tryCatch(readRDS(file.path(config$data_folder,
-                                                "file_settings.rds")),
-                              warning = function(e) {
+    package.path <- find.package("SBCpip",
+                                 lib.loc = NULL, quiet = FALSE,
+                                 verbose = getOption("verbose"))
+    destination.path <- file.path(package.path,
+                                  "user_settings", "file_settings.rds")
+    
+    file_settings <- tryCatch(readRDS(file = destination.path),
+                              error = function(e) {
                                 shinyalert::shinyalert("Oops!", "Loading failed. Make sure you have saved file settings first.")
                                 return()
                               })
@@ -558,12 +557,19 @@ server <- function(input, output, session) {
     
     config <- SBCpip::get_SBC_config()
     
-    result <- tryCatch(saveRDS(feat_list, file = file.path(config$data_folder, "features.rds")),
+    package.path <- find.package("SBCpip",
+                                 lib.loc = NULL, quiet = FALSE,
+                                 verbose = getOption("verbose"))
+    destination.path <- file.path(package.path,
+                                  "user_settings", "features.rds")
+    
+    result <- tryCatch(saveRDS(feat_list, 
+                               file = destination.path),
                        warning = function(e) {
                          shinyalert::shinyalert("Oops!", "Saving failed. Make sure you have entered the correct file path.")
                          simpleWarning(e)$message
                        })
-    
+                       
     if (!is.character(result)) shinyalert::shinyalert("Success!", "Saved New Default Features.")
   })
   
@@ -571,8 +577,15 @@ server <- function(input, output, session) {
     # Grab CBC Features
     config <- SBCpip::get_SBC_config()
     result <- NULL
-    features <- tryCatch(readRDS(file = file.path(config$data_folder, "features.rds")),
-                         warning = function(e) {
+    
+    package.path <- find.package("SBCpip",
+                                 lib.loc = NULL, quiet = FALSE,
+                                 verbose = getOption("verbose"))
+    destination.path <- file.path(package.path,
+                                  "user_settings", "features.rds")
+    
+    features <- tryCatch(readRDS(file = destination.path),
+                         error = function(e) {
                            shinyalert::shinyalert("Oops!", "Loading failed. Make sure you have supplied the correct folders and saved features.")
                            NULL
                          })
@@ -635,7 +648,7 @@ server <- function(input, output, session) {
     
     # Other model/prediction/validation parameters
     SBCpip::set_config_param("history_window", input$history_window)
-    SBCpip::set_config_param("lag_window", input$lag_window)
+    SBCpip::set_config_param("lag_window", 7)
     SBCpip::set_config_param("start", input$start)
     SBCpip::set_config_param("model_update_frequency", input$model_update_frequency)
     SBCpip::set_config_param("l1_bounds", seq(from = input$l1_bound_range[2], to = input$l1_bound_range[1], by = -2))
@@ -687,7 +700,7 @@ server <- function(input, output, session) {
     showModal(modalDialog(sprintf("Building DuckDB database based on all available files in %s. 
                                     Estimated total time is %d minutes", config$data_folder, floor(n_files / 400)),
                           footer = NULL))
-    date_range <- tryCatch(db %>% SBCpip::sbc_build_and_save_full_db(config, updateProgress), error = function(e) {
+    date_range <- tryCatch(db %>% SBCpip::build_and_save_database(config, updateProgress), error = function(e) {
       print(e)
       NULL
     })
@@ -810,7 +823,7 @@ server <- function(input, output, session) {
       shinyalert::shinyalert("Note", "Model is retraining - this may take some time to complete.")
     }
     
-    pr <- db %>% SBCpip::predict_for_date_db(config = config, date = input$predictDate) %>%
+    pr <- db %>% SBCpip::predict_for_date(config = config, date = input$predictDate) %>%
       dplyr::mutate_at("date", as.character)
     
     coefs <- db %>% dplyr::tbl("model") %>% 
@@ -926,7 +939,7 @@ server <- function(input, output, session) {
           }
     
           # Predict range that needs to be predicted
-          prediction_df <- tryCatch(db %>% SBCpip::sbc_predict_for_range_db(start_date, num_days, config, 
+          prediction_df <- tryCatch(db %>% SBCpip::predict_usage_over_range(start_date, num_days, config, 
                                                                    updateProgress = updateProgress),
                                     error = function(e) {
                                       output$predAnalysis <- renderTable({
@@ -940,11 +953,11 @@ server <- function(input, output, session) {
         
         if (!validating() | (validating() & !is.null(prediction_df))) {
           pred_analysis <- tryCatch(db %>% 
-                                      SBCpip::build_prediction_table_db(config, 
+                                      SBCpip::build_prediction_table(config, 
                                                                         start_date, 
                                                                         end_date, 
                                                                         prediction_df) %>% 
-                                      SBCpip::pred_table_analysis(config),
+                                      SBCpip::analyze_prediction_table(config),
                                     error = function(e) {
                                       output$predAnalysis <- renderTable({
                                         simpleError(e)$message
@@ -953,9 +966,9 @@ server <- function(input, output, session) {
                                       })
         
           coef_analysis <- tryCatch(db %>% 
-                                      SBCpip::build_coefficient_table_db(start_date, 
+                                      SBCpip::build_coefficient_table(start_date, 
                                                                          num_days) %>%
-                                      SBCpip::coef_table_analysis(),
+                                      SBCpip::analyze_coef_table(),
                                     error = function(e) {
                                       output$predAnalysis <- renderTable({
                                         simpleError(e)$message
@@ -1009,8 +1022,8 @@ server <- function(input, output, session) {
       if (DBI::dbIsValid(db)) DBI::dbDisconnect(db, shutdown = TRUE) 
     }, add = TRUE)
     
-    db %>% build_prediction_table_db(config, start_date = input$plotDateStart, 
-                                     end_date = input$plotDateEnd) %>%
+    db %>% build_prediction_table(config, start_date = input$plotDateStart,
+                                  end_date = input$plotDateEnd) %>%
       dplyr::filter(date >= input$plotDateStart + config$start + 5L) %>%
       dplyr::filter(date <= input$plotDateEnd - 3L) ->
       d
@@ -1096,9 +1109,9 @@ server <- function(input, output, session) {
     end_date <- as.Date(input$coefPlotDateEnd)
     num_days <- as.integer(end_date - start_date + 1)
     
-    coef_table <- db %>% SBCpip::build_coefficient_table_db(start_date, num_days)
+    coef_table <- db %>% SBCpip::build_coefficient_table(start_date, num_days)
     
-    pred_table <- db %>% SBCpip::build_prediction_table_db(config, start_date, end_date)
+    pred_table <- db %>% SBCpip::build_prediction_table(config, start_date, end_date)
     
     # Number of units expiring in 1 day (4) + number expiring in 2 days (5)
     p1 <- coef_table %>% 
