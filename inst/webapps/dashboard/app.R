@@ -701,7 +701,7 @@ server <- function(input, output, session) {
                                     Estimated total time is %d minutes", config$data_folder, floor(n_files / 400)),
                           footer = NULL))
     date_range <- tryCatch(db %>% SBCpip::build_and_save_database(config, updateProgress), error = function(e) {
-      print(e)
+      shinyalert::shinyalert("Oops!", "Database build failed. Please check your file settings.")
       NULL
     })
     DBI::dbDisconnect(db, shutdown = TRUE)
@@ -845,7 +845,7 @@ server <- function(input, output, session) {
     DBI::dbDisconnect(db, shutdown = TRUE)
     
     # Return the predicted usage and recommended number of units to collect in 3 days.
-    list(output_txt = sprintf("Prediction Date: %s\nPredicted Usage for Next 3 Days: %d Units\n Recommended Amount to Collect in 3 Days: %d Units\n Model retraining in: %d Days",
+    list(output_txt = sprintf("Prediction Date: %s\nPredicted Usage for Next 3 Days: %d Units\nRecommended Amount to Collect Today: %d Units\nModel retraining in: %d Days",
                               input$predictDate,
                               pr$t_pred, 
                               next_collection,

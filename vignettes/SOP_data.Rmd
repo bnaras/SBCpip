@@ -1,0 +1,185 @@
+---
+title: "SBCpip Platelet Prediction - Data Compatibility"
+author: "Balasubramanian Narasimhan, Kai Eiji Okada"
+date: '`r Sys.Date()`'
+output:
+  html_document:
+      toc: yes
+      toc_float: true
+      toc_depth: 3
+  fig_caption: yes
+  theme: cerulean
+bibliography: platelet.bib
+vignette: >
+  %\VignetteEngine{knitr::knitr}
+  %\VignetteIndexEntry{SBCpip Platelet Prediction - Data Compatibility}
+  \usepackage[utf8]{inputenc}
+---
+
+<style>
+<style type="text/css">
+h1 { /* Header 1 */
+  font-size: 28px;
+  color: DarkBlue;
+}
+h2 { /* Header 2 */
+  font-size: 22px;
+  color: DarkBlue;
+}
+h3 { /* Header 3 */
+  font-size: 18px;
+  color: DarkBlue;
+</style>
+
+# Introduction
+
+At a high level, the `SBCpip` package provides an interface to a model that predicts blood platelet
+usage based on hospital data over time. It also recommends the number of units that should be 
+collected to satisfy future usage. The model itself is specified in the `pip` package, and it relies 
+on time-series prediction using a linear program, based on work by @Guan11368 with the Stanford Blood Center (SBC).
+
+This vignette is concerned with preparing an organization's data files to predictive use with `SBCpip`. Once the data has been mapped to the SBC format according to the below steps, users should review [this vignette](SOP_dashboard.html) to understand the dashboard functions.
+
+A fuller technical treatment of the package is given in this [vignette](SOP_dev.html).
+
+# Quick Start
+
+To get started, enter the following commands in the R console (via terminal command line or in RStudio) :
+
+```{r, eval=FALSE}
+install.packages("devtools")
+library(devtools)
+
+devtools::install_github(repo = "https://github.com/okadak126/pip")
+devtools::install_github(repo = "https://github.com/okadak126/SBCpip")
+library(pip)
+library(SBCpip)
+```
+
+
+To explore the Prediction Dashboard before preparing actual site-specific data, users can run the following commands to set up a sample data folder (called "platelet_data_sample"):
+```{r, eval=FALSE}
+sample_data <- system.file(package = "SBCpip", "extdata", "platelet_data_sample.zip")
+unzip(sample_data, exdir = "mydirectory") 
+# User should adjust the exdir path based on their system. The data folder is "mydirectory/platelet_data_sample"
+```
+
+At this point, users can immediately launch the dashboard by running:
+```{r, eval=FALSE}
+sbc_dashboard()
+```
+
+Note that additional packages may need to be installed at this point to run the dashboard. Run `install.packages("package")` according to these requirements.
+
+The sections below describe how to prepare actual site-specific data files for use with the SBCpip dashboard.
+
+# Data Overview
+`SBCpip` relies on 5 different file types. "CBC", "Census", and "Surgery" are included as covariates/features in fitting the predictive model, and "Transfusion" contains information about blood product usage Each of the below file types must be added to the same data folder for each date used in making the prediction:
+
+1. **CBC:** Results of Complete Blood Count (CBC) tests on hospital patients on a given date. The goal is to identify abnormal levels in hospital patients and use these instances as inputs to the model [1 row = 1 unique measurement].
+2. **Census:** Locations of patients in the hospital system (e.g. rooms, wards) on a given date. The goal is to identify specific locations that are increasing hospital demand for specific blood products [1 row = 1 unique patient].
+3. **Surgery:** Surgeries carried out by hospital on a given date (or scheduled to be performed in the next 3 days). The goal is to identify particular surgery types that are increasing hospital demand for specific blood products [1 row = 1 unique operation].
+4. **Transfusion:** Transfusions that occur at the hospital on a given date. This is the response which we try to predict (transfusions over next 2 or 3 days) [1 row = 1 unique transfusion of a blood product].
+5. **Inventory:** Blood products collected and available in inventory for issue to hospital / transfusions. We use this to compare model performance to actual historical protocol [1 row = 1 unit]. Note that inventory files should be in .xlsx format.
+
+
+# Data Compatibility
+The information contained in each type of file will be organization-specific. Required columns from each file type are stipulated in the template file `extdata/sbc_data_mapping.csv`, which should be completed by the user prior to running the dashboard. The goal is to create a mapping from site-specific files to the format used by the Stanford Blood Center.
+
+In order to open the mapping file, run the following commands in R (commands will differ based on operating system):
+```{r, eval=FALSE}
+sbc_data_mapping <- system.file(package = "SBCpip", "extdata", "sbc_data_mapping.csv")
+
+system2("open ", sbc_data_mapping, wait=FALSE)
+```
+
+The user should change the values in the "org_data_column_to_edit" column to column names in their organization's data files that correspond to each column described in the mapping. Below is a summary of the required fields for each file type:
+
+| Data File  |SBC Column Name | Description                                                                                    | Data Type/Format                            |
+|:-----------|:--------------------|:-----------------------------------------------------------------------------------------------|:----------------------------------|
+|cbc         |ORDER_PROC_ID        |CBC Unique Identifier                                                                           |Character                          |
+|cbc         |BASE_NAME            |Specific blood cell / component type                                                            |Character                          |
+|cbc         |RESULT_TIME          |Datetime at which the test result was obtained                                                  |e.g. 09-Mar-20 00:00:00    |
+|cbc         |ORD_VALUE            |Value obtained for the specific component as a result of the test (coerced to Double)           |Character                          |
+|census      |PAT_ID               |Unique Patient Identifier                                                                       |Character                          |
+|census      |LOCATION_NAME        |Name of location where patient was present                                                      |Character                          |
+|census      |LOCATION_DT          |Datetime at which patient was logged as present in a specific location/section of the hospital. | e.g. 01/16/2020  12:00:00AM |
+|surgery     |LOG_ID               |Unique identifier for set of surgical procedures                                                |Character                          |
+|surgery     |OR_SERVICE           |Specific type of surgery to be carried out                                                      |Character                          |
+|surgery     |SURGERY_DATE         |Datetime of surgical operation                                                                  |e.g. 01/29/2020  12:00:00 AM |
+|surgery     |FIRST_SCHED_DATE     |Datetime indicating when procedure was first scheduled                                          |e.g. 01/29/2020  12:00:00 AM |
+|surgery     |CASE_CLASS           |Indicator of whether surgery is “Elective” or “Urgent”                                          |Character                          |
+|transfusion |DIN                  |Donation Identification Number that uniquely identifies the group of units transfered           |Character                          |
+|transfusion |Product Code         |Code that uniquely identifies the product                                                       |Character                          |
+|transfusion |Type                 |Specific blood cell / component type being transfused. We focus on “PLT”                        |Character                          |
+|transfusion |Issue Date/Time      |Datetime when component is transfused to patient                                                |e.g. 01/29/2020  12:00:00 AM |
+|inventory   |Inv. ID              |Unique identifier for product in inventory                                                      |Character                          |
+|inventory   |Type                 |The specific type of transfusable product (e.g. “PLT”)                                          |Character                          |
+|inventory   |Days to Expire       |Number of days after which unit is considered expired                                           |Integer                            |
+|inventory   |Exp. Date            |Specific date on which unit is set to expire                                                    |e.g. 2/4/2020  4:00:00 PM |
+|inventory   |Exp. Time            |Specific time on which unit is set to expire                                                    |Double                             |
+
+ <!-- 1. **CBC:** (csv/tsv format)
+	* ORDER_PROC_ID: Unique Identifier [Character]
+	* BASE_NAME: Specific blood cell / component type. [Character]
+	* RESULT_TIME: Datetime at which the test result was obtained. [Datetime ("%d-%b-%y %H:%M:%S")]
+	* ORD_VALUE: Value obtained for the specific component as a result of the test [Character - coerced to double]
+
+2. **Census:** (.csv/.tsv format)
+	* PAT_ID: Unique Patient Identifier [Character]
+	* LOCATION_DT: Datetime at which patient was logged as present in a specific location/section of the hospital. [Datetime("%m/%d/%Y  %I:%M:%S%p")]
+	* LOCATION_NAME: Name of location where patient was present. [Character]
+
+3. **Surgery:** (.csv/.tsv format)
+	* LOG_ID: Unique identifier for set of surgical procedures [Character]
+	* SURGERY_DATE: Datetime of procedure [Datetime("%m/%d/%Y  %I:%M:%S %p”)]
+	* FIRST_SCHED_DATE: Datetime indicating when procedure was first scheduled [Datetime("%m/%d/%Y  %I:%M:%S %p”)]
+	* CASE_CLASS: Indicator of whether surgery is “Elective” or “Urgent” [Character]
+	* OR_SERVICE: Specific type of surgery to be carried out. [Character]
+
+4. **Transfusion:** (.csv/.tsv format)
+	* DIN: Donation Identification Number that uniquely identifies the transfused unit [Character]
+	* Issue Date/Time: Datetime when component is transfused to patient [Datetime("%m/%d/%Y  %I:%M:%S %p")]
+	* Type: Specific blood cell / component type being transfused. The code assumes that "PLT" is contained in the set of possible values [Character]
+
+5. **Inventory:** (.xls format)
+	* Inv. ID: Unique identifier for product in inventory [Character]
+	* Type: The specific type of transfusable product (e.g. “PLT”) [Character]
+	* Days to Expire: Number of days after which unit is considered expired [Double]
+	* Exp. Date: Specific date on which unit is set to expire [Datetime("%m/%d/%Y  %I:%M:%S %p")]
+	* Exp. Time: Specific time at which unit is set to expire [Double] -->
+
+# Additional CBC Data Preparation
+The CBC inputs are pre-processed differently from the other files, as the model accepts counts of patients whose CBC levels fall below a certain threshold (or above, in the case of White Blood Cell levels). Quantiles and abnormal levels must be defined for the specific CBC components that the user would like to include as inputs to the model, and this is handled using the provided template file `extdata/cbc_thresholds.csv`.
+
+The steps to open and modify this file are similar to those of the mapping file:
+```{r, eval=FALSE}
+cbc_thresholds <- system.file(package = "SBCpip", "extdata", "cbc_thresholds.csv")
+
+system2("open", cbc_thresholds, wait=FALSE)
+```
+
+For each CBC component of interest, the user must specify the following fields in the file (for both quantiles and abnormals):
+
+### Quantiles
+* `metric` = "quantile"
+* `base_name` = CBC component, e.g. "PLT"
+* `type` = "literal" (quantile is a fixed value) or "quantile" (quantile is computed based with respect to given data)
+* `value` = either the literal value (for "literal") or the p-quantile to be computed (for "quantile", 0 < p < 1) that defines the threshold below which the patient's levels would be considered low (high for White Blood Cells) 
+
+### Abnormals
+* `metric` = "abnormal"
+* `base_name` = CBC component, e.g. "PLT"
+* `type` = "less" or "greater" depending on the direction of abnormality
+* `value` = the threshold value below ("less") or above ("greater") which we consider the level "abnormal"
+
+Note that CBC components for which a quantile and abnormal designation is not provided will be ignored as inputs to the model (a warning will be issued). Below is an example of possible entries in the file:
+
+|metric   |base_name |type     | value|
+|:--------|:---------|:--------|-----:|
+|quantile |HGB       |quantile |  0.25|
+|abnormal |HGB       |less     |  9.00|
+
+The first line would be interpreted as "include in model input counts of patients below the 25th percentile in terms of hemoglobin". The second line would be interpreted as "consider hemoglobin levels less than 9 to be abnormal".
+
+# References
