@@ -12,7 +12,7 @@ output:
 bibliography: platelet.bib
 vignette: >
   %\VignetteEngine{knitr::knitr}
-  %\VignetteIndexEntry{Vignette Title}
+  %\VignetteIndexEntry{SBCpip Platelet Prediction - R Approach}
   \usepackage[utf8]{inputenc}
 ---
 <style>
