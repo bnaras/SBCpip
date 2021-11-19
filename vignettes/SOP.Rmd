@@ -1,5 +1,5 @@
 ---
-title: "SBCpip Platelet Prediction - Operating Procedures"
+title: "SBCpip Platelet Prediction - Dashboard Procedures"
 author: "Balasubramanian Narasimhan, Kai Eiji Okada"
 date: '`r Sys.Date()`'
 output:
@@ -43,7 +43,6 @@ to make predictions. A fuller technical treatment of the package is given in thi
 
 # Quick Start
 
-## Package Installation
 To get started, enter the following commands in the R console (via terminal command line or in RStudio) :
 
 ```{r, eval=FALSE}
@@ -56,15 +55,27 @@ library(pip)
 library(SBCpip)
 ```
 
-This will allow the user to start the dashboard by running 
+
+To explore the Prediction Dashboard before preparing actual site-specific data, users can run the following commands to set up a sample data folder (called "platelet_data_sample"):
+```{r, eval=FALSE}
+sample_data <- system.file(package = "SBCpip", "extdata", "platelet_data_sample.zip")
+unzip(sample_data, exdir = "mydirectory") 
+# User should adjust the exdir path based on their system. The data folder is "mydirectory/platelet_data_sample"
+```
+
+At this point, users can launch the dashboard by running:
 ```{r, eval=FALSE}
 sbc_dashboard()
 ```
 
-## Data Preparation
+Note that there may be additional packages that need to be installed at this point to run the dashboard. Run `install.packages("package")` according to these requirements.
 
-### Overview
-`SBCpip` relies on 5 different file types. Each of the below file types must be added to the same data folder for each date used in making the prediction:
+With the data directory just generated, users can skip to the **Running the Dashboard** section below. Please note that the provided sample data include synthetic data from each of the required file types from November 30, 2019, through May 10, 2020. The format of each of these sample files is based on files originally obtained from the Stanford Blood Center. The section below explains each of the file types in greater detail.
+
+# Data Preparation
+
+## Overview
+`SBCpip` relies on 5 different file types. "CBC", "Census", and "Surgery" are included as covariates/features in fitting the predictive model, and "Transfusion" contains information about blood product usage Each of the below file types must be added to the same data folder for each date used in making the prediction:
 
 1. **CBC:** Results of Complete Blood Count (CBC) tests on hospital patients on a given date. The goal is to identify abnormal levels in hospital patients and use these instances as inputs to the model (1 row = 1 unique measurement)
 2. **Census:** Locations of patients in the hospital system (e.g. rooms, wards) on a given date. The goal is to identify specific locations that are increasing hospital demand for specific blood products. (1 row = 1 unique patient)
@@ -73,8 +84,8 @@ sbc_dashboard()
 5. **Inventory:** Blood products collected and available in inventory for issue to hospital / transfusions. We use this to compare model performance to actual historical protocol (1 row = 1 unit). Note that inventory files should be in .xlsx format.
 
 
-### Data Compatibility
-The information contained in each type of file will be organization-specific. Required columns from each file type are stipulated in the template file `extdata/sbc_data_mapping.csv`, which should be completed by the user prior to running the dashboard.
+## Data Compatibility
+The information contained in each type of file will be organization-specific. Required columns from each file type are stipulated in the template file `extdata/sbc_data_mapping.csv`, which should be completed by the user prior to running the dashboard. The goal is to create a mapping from site-specific files to the format used by the Stanford Blood Center.
 
 In order to open the mapping file, run the following commands in R (commands will differ based on operating system):
 ```{r, eval=FALSE}
@@ -143,7 +154,7 @@ The user should change the values in the "org_data_column_to_edit" column to col
 	* Exp. Date: Specific date on which unit is set to expire [Datetime("%m/%d/%Y  %I:%M:%S %p")]
 	* Exp. Time: Specific time at which unit is set to expire [Double] -->
 
-### Additional CBC Data Preparation
+## Additional CBC Data Preparation
 The CBC inputs are pre-processed differently from the other files, as the model accepts counts of patients whose CBC levels fall below a certain threshold (or above, in the case of White Blood Cell levels). Quantiles and abnormal levels must be defined for the specific CBC components that the user would like to include as inputs to the model, and this is handled using the provided template file `extdata/cbc_thresholds.csv`.
 
 The steps to open and modify this file are similar to those of the mapping file:
@@ -197,9 +208,12 @@ expected usage for prediction tasks:
 
 ## Database Settings
 
-![](images/1database_settings.png) 
+This panel allows the user to specify the files, folders, and relevant features to 
+construct the database that will be used in model training and prediction.
 
-#### Instructions
+![](images/1database_settings.png){width=70%}
+
+#### Instructions:
 
 1. Specify the local paths to the database, the data folder, and the log folder, as well as filename prefixes for each type of data file under "Filename Patterns". Then click **Save File Settings**. If you have already done this in a previous session, click **Load File Settings**. 
 
@@ -207,7 +221,7 @@ expected usage for prediction tasks:
 
 3. Click **Apply Database Settings** and then **Build Database** on the lefthand panel. This operation will take several minutes to complete. It builds a database based on every data file in the specified data folder.
 
-#### Tips
+#### Tips:
 
 - To determine appropriate paths for the Input and Output Locations, run the following `setwd("~");getwd()` in the R console. This will return the home directory (e.g. "/Users/myname"). Then append appropriate subfolders such as "/Desktop/mydata".
 
@@ -215,71 +229,121 @@ expected usage for prediction tasks:
 
 - Filename prefixes for each file type should immediately precede the date for the particular file. For example, if the prefix for a Census file is `Hospital_Census_Data`, the name of the Census file obtained on March 10, 2020, should begin `Hospital_Census_Data2020-03-10`
 
-- To experiment with synthetic sample data, run the following in R:
+- Again, to experiment with synthetic sample data, run the following in R:
 ```{r, eval=FALSE}
 sample_data <- system.file(package = "SBCpip", "extdata", "platelet_data_sample.zip")
-unzip(sample_data, exdir = "mydirectory") # Adjust the exdir path. The data folder is "mydirectory/platelet_data_sample"
+unzip(sample_data, exdir = "mydirectory")
+# User should adjust the exdir path based on their system. The data folder is "mydirectory/platelet_data_sample"
 ```
 
+---------
+
 ## Reports 
-![](images/2reports.png) 
 
-#### Instructions
-
-1. Reports are primarily for querying and sanity-checking the built database. Provide a range of dates
+Reports are primarily for querying and sanity-checking the built database. Provide a range of dates
 (or a single date) to analyze and click **Summarize**. This displays the mean and standard deviations of
 each of the features over the date range.
 
+![](images/2reports.png){width=70%}
+
+---------
+
 ## Model Settings
-This allows the user to set model training parameters such as the 
-(positive) prediction bias, number of previous days used in training window, and hyperparameter values.
-The dashboard provides some additional intuition regarding the effects of modifying each of these parameters.
+The user sets model training parameters such as the  (positive) prediction bias, number of previous days used in training window, and hyperparameter values. The dashboard provides some additional intuition regarding the effects of modifying each of these parameters.
+
+![](images/3modelsettings.png){width=70%}
+
+#### Instructions
+
+1. Modify Model Parameters as needed based on the results of model validation. Hovering over each parameter name will display additional information about the impact of adjusting the parameter on model predictions. For a more mathematical treatment of the model parameters, please refer to **Model Description and Behavior** [here](SOP_dev.html).
+
+2. Click "Apply Model Settings"
+
+3. If you would like to clear previous predictions to run a new set of predictions over the same dates, click "Clear Prediction Cache"
+
+---------
+
 
 ## Validate Model Over Range
-Once the Model Training parameters are set, the user can then
-run predictions over a specified range of dates and compare the usage predictions and waste generate against "true"
-values of usage and waste according to the true historical protocol. The result displays a summary of 
-prediction error, waste, shortage, and nonzero coefficients in the model. As predictions are cached in the
-database, the user can then restart the Dashboard and click "Summary Table" over the same range of dates to
-skip running the model and display the analysis from a previous prediction.
+The user can run predictions over a specified range of dates and compare the usage predictions and waste generate against "true" values of usage and waste according to the historical protocol. 
+
+![](images/4a_validaterange.png){width=70%}
+
+#### Instructions:
+
+1. Supply the start and end dates for a date range over which to validate the model settings. Then click **Validate Model**. Note that it is important to understand the range of dates available in the data folder/database. For the given sample data and a training history window of 100 days, Start Date = "2020-03-20" and End Date = "2020-05-05" are appropriate. 
+
+2. If you have already run the validation above in a previous session, the predictions should be cached in the database, so click **Summary Table** over the same range of dates.
+
+The result displays a summary of prediction error, waste, shortage, and nonzero coefficients in the model.
+
+![](images/4b_validaterange.png){width=70%}
+
+#### Tips:
+- Depending on the length of the prediction date range and certain **Model Settings** parameters, the validation can take up to 20-30 minutes to complete. A progress bar is provided as shown above.
+
+- In this toy example, the model drastically outperforms the true (randomized) protocol based on the Inventory Files. In addition to comparing the Model's Waste and Shortage with those under the true protocol, the RMSE figures break down the model's raw prediction error by its positive and negative portions, as well as by day of week. In this case, the error is positively biased, which we expect based on the bias parameters specified in **Model Settings**.
+
+- The right-hand panel displays coefficients with particularly large magnitudes over the course of the validation period (excluding the day of week). This is used to compare importance of specific features driving platelet usage with intuition.
+
+- Note that the provided "Start Date" and "End Date" do not match the "Prediction Started" and "Prediction Ended" dates. Recall that the `start` parameter sets a delay between we start running the model for evaluation and when we begin to assess Waste, Shortage, etc. Also note that the validation must end 3 days prior to the specified "End Date" because we compare model predictions against platelet usage for the next 3 days.
+
+---------
+
 
 ## Predict for Today
-This assumes the user would like to run a prediction of 
+With a validated model, this mode assumes the user would like to run a prediction of 
 expected platelet usage over the next 3 days (including today) without necessarily 
-being able to validate against ground truth (i.e. use the model in practice). 
-The user must input the number of inventory platelets expiring at the end of the 
-day on the specified date as well as on the following day, and the number of fresh
-platelets scheduled to become available for use on those dates. This allows the
-model to both predict the three day usage *and* recommend the number of platelets
-that should be collected today so that they may be available for use in 2 days and
-satisfy the anticipated demand. The model may or may not need to retrain depending
-on the `model_update_freqency` specified in Part 3 - in any case, the model also
-outputs a list of the most non-zero valued coefficients by their absolute value.
+being able to validate against ground truth transfusions.
+
+![](images/5predicttoday.png){width=50%}
+
+#### Instructions:
+1. Add new data files to the Data Folder from the previous day $i$ (5 files in total - see **Data Preparation**). Each file must include date $i + 1$ (the current day) in the name. In the example above, all 5 filenames should contain "2020-05-07"
+2. Input this same date in the "Date (i + 1)" field
+3. Input the number of fresh platelets that will be collected today and tomorrow 
+4. Input the number of remaining inventory platelets expiring at the end of the day today as well as tomorrow.
+5. Check that the database includes data from the start of the training history window until day $i - 1$ (e.g. using **Reports**), then click **Predict**.
+ 
+#### Tips:
+
+- When the user runs **Predict**, data from the new files for day $i$ will automatically be added to the database.
+
+- The model may or may not need to retrain depending on the `model_update_freqency` specified in **Model Settings**. In either case, the model also outputs a list of non-zero valued feature coefficients by their absolute value.
+
+---------
+
 
 ## Prediction Plots
-This plots 6 line graphs for the specified date range, 
-which can correspond to either predictions made over a range of dates in Part 4 or Part 5:
+This plots 6 line graphs for the specified date range, which can correspond to dates used for prediction in either **Validate Model Over Range** or **Predict for Today**.
 
-- Predicted vs. actual next-three-day usage for each day.
-- Collection recommendations over time for each day
-- Model's generated waste vs. number of platelets remaining in inventory that 
-expire the following day (waste precursor)
-- True waste vs. number of platelets remaining in inventory that 
+![](images/6predictionplots.png)
+
+#### Summary of Plots
+
+1. Predicted vs. actual next-three-day usage for each day (note consistent positive bias to avoid shortage)
+2. Collection recommendations over time for each day vs. true collections (note that true collection far exceeds recommendation)
+3. Model's generated waste vs. number of platelets remaining in inventory that 
+expire the following day (this is a waste precursor)
+4. True waste vs. number of platelets remaining in inventory that 
 expire the following day (based on policy carried out in practice)
-- Model's shortage vs. number of platelets remaining in inventory that expire
-in 2 days (shortage precursor)
-- True shortage vs. number of platelets remaining in inventory that expire
+5. Model's shortage vs. number of total platelets remaining in inventory
+6. True shortage vs. number of platelets remaining in inventory that expire
 in 2 days (based on policy carried out in practice)
-  
+
+---------
+
 ## Coefficient Plots
 For a given range of dates with predictions, the user 
 can select coefficients from a picklist, and the dashboard will plot their evolution over time.
-They are plotted against `Coefficient L1 Bound`, which is the constraint on the absolute value of the sum
+They are plotted against `Coefficient L1 Bound` (thick red line), which is the constraint on the absolute value of the sum
 of the coefficients (this ensures a sparse model by L1 regularization). 
 
-The Dashboard interface includes annotations regarding the effect of changing the 
-model training parameters, as well as more fine-grained usage instructions.
+We note from **Validate Model Over Range** that "HGB", "MCHC", and "RDW" are prominent covariates - therefore we may be interested in plotting them over time (the same validation date range). This is shown below:
 
+![](images/7coefficientplot.png){width=70%}
+
+Based on the plot above, it is clear that none of the three selected covariates comprises a significant proportion of the total possible signal (given by the thick red line).
 
 # References
 

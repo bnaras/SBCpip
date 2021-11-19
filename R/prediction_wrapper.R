@@ -71,7 +71,7 @@ build_and_save_database <- function(conn, config, updateProgress = NULL) {
                             temporary = FALSE)
   }
   # Return first and last date processed.
-  c(all_dates[1], all_dates[2])
+  c(all_dates[1], all_dates[length(all_dates)])
 }
 
 #' Database version of range prediction
