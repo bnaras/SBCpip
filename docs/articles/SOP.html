@@ -5,19 +5,20 @@
 <meta charset="utf-8">
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Stanford Blood Center Operating Procedures • SBCpip</title>
-<!-- jquery --><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script><!-- Bootstrap --><link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.3.7/cerulean/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha256-U5ZEeKfGNOja007MMD3YBI0A3OSZOQbeG6z2f2Y0hu8=" crossorigin="anonymous"></script><!-- Font Awesome icons --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" integrity="sha256-eZrrJcwDc/3uDhsdt61sL2oOBY362qM3lon1gyExkL0=" crossorigin="anonymous">
-<!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js" integrity="sha256-FiZwavyI2V6+EXO1U+xzLG3IKldpiTFf3153ea9zikQ=" crossorigin="anonymous"></script><!-- sticky kit --><script src="https://cdnjs.cloudflare.com/ajax/libs/sticky-kit/1.1.3/sticky-kit.min.js" integrity="sha256-c4Rlo1ZozqTPE2RLuvbusY3+SU1pQaJC0TjuhygMipw=" crossorigin="anonymous"></script><!-- pkgdown --><link href="../pkgdown.css" rel="stylesheet">
-<script src="../pkgdown.js"></script><meta property="og:title" content="Stanford Blood Center Operating Procedures">
-<meta property="og:description" content="">
-<meta name="twitter:card" content="summary">
+<title>SBCpip Platelet Prediction - Dashboard Procedures • SBCpip</title>
+<!-- jquery --><script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script><!-- Bootstrap --><link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.4.0/cerulean/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.4.1/js/bootstrap.min.js" integrity="sha256-nuL8/2cJ5NDSSwnKD8VqreErSWHtnEP9E7AySL+1ev4=" crossorigin="anonymous"></script><!-- bootstrap-toc --><link rel="stylesheet" href="../bootstrap-toc.css">
+<script src="../bootstrap-toc.js"></script><!-- Font Awesome icons --><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css" integrity="sha256-mmgLkCYLUQbXn0B1SRqzHar6dCnv9oZFPEC1g1cwlkk=" crossorigin="anonymous">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/v4-shims.min.css" integrity="sha256-wZjR52fzng1pJHwx4aV2AO3yyTOXrcDW7jBpJtTwVxw=" crossorigin="anonymous">
+<!-- clipboard.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script><!-- headroom.js --><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js" integrity="sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script><!-- pkgdown --><link href="../pkgdown.css" rel="stylesheet">
+<script src="../pkgdown.js"></script><meta property="og:title" content="SBCpip Platelet Prediction - Dashboard Procedures">
+<meta property="og:description" content="SBCpip">
 <!-- mathjax --><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/MathJax.js" integrity="sha256-nvJJv9wWKEm88qvoQl9ekL2J+k/RWIsaSScxxlsrv8k=" crossorigin="anonymous"></script><script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.5/config/TeX-AMS-MML_HTMLorMML.js" integrity="sha256-84DKXVJXs0/F8OTMzX4UR909+jtl4G7SPypPavF+GfA=" crossorigin="anonymous"></script><!--[if lt IE 9]>
 <script src="https://oss.maxcdn.com/html5shiv/3.7.3/html5shiv.min.js"></script>
 <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
 <![endif]-->
 </head>
-<body>
+<body data-spy="scroll" data-target="#toc">
     <div class="container template-article">
       <header><div class="navbar navbar-default navbar-fixed-top" role="navigation">
   <div class="container">
@@ -30,7 +31,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">SBCpip</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.3.9</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.3-10</span>
       </span>
     </div>
 
@@ -38,7 +39,7 @@
       <ul class="nav navbar-nav">
 <li>
   <a href="../index.html">
-    <span class="fa fa-home fa-lg"></span>
+    <span class="fas fa-home fa-lg"></span>
      
   </a>
 </li>
@@ -53,12 +54,25 @@
   </a>
   <ul class="dropdown-menu" role="menu">
 <li>
-      <a href="../articles/SOP.html">Stanford Blood Center Operating Procedures</a>
+      <a href="../articles/SOP.html">SBCpip Platelet Prediction - Dashboard Procedures</a>
+    </li>
+    <li>
+      <a href="../articles/SOP_dev.html">SBCpip Platelet Prediction - R Approach</a>
     </li>
   </ul>
 </li>
+<li>
+  <a href="../news/index.html">Changelog</a>
+</li>
       </ul>
-<ul class="nav navbar-nav navbar-right"></ul>
+<ul class="nav navbar-nav navbar-right">
+<li>
+  <a href="https://github.com/bnaras/SBCpip/">
+    <span class="fab fa-github fa-lg"></span>
+     
+  </a>
+</li>
+      </ul>
 </div>
 <!--/.nav-collapse -->
   </div>
@@ -67,170 +81,501 @@
 <!--/.navbar -->
 
       
-      </header><div class="row">
+
+      </header><script src="SOP_files/header-attrs-2.11/header-attrs.js"></script><div class="row">
   <div class="col-md-9 contents">
     <div class="page-header toc-ignore">
-      <h1>Stanford Blood Center Operating Procedures</h1>
-                        <h4 class="author">Balasubramanian Narasimhan</h4>
+      <h1 data-toc-skip>SBCpip Platelet Prediction - Dashboard Procedures</h1>
+                        <h4 class="author">Balasubramanian Narasimhan, Kai Eiji Okada</h4>
             
-            <h4 class="date">2019-01-21</h4>
+            <h4 class="date">2021-11-18</h4>
       
-      
+      <small class="dont-index">Source: <a href="https://github.com/bnaras/SBCpip/blob/master/vignettes/SOP.Rmd"><code>vignettes/SOP.Rmd</code></a></small>
       <div class="hidden name"><code>SOP.Rmd</code></div>
 
     </div>
 
     
     
-<div id="introduction" class="section level2">
-<h2 class="hasAnchor">
-<a href="#introduction" class="anchor"></a>Introduction</h2>
-<p>This is a brief introduction to how the <code>pip</code> package and <code>SBCpip</code> packages work together.</p>
-<p>Why two packages?</p>
-<p>The <code>pip</code> package is meant to be site-independent. In other words, all it does is the training and prediction. In its current implementation, it tries very hard to be faithful the original <span class="citation">Guan et al. (2017)</span> publication.</p>
-<p>The <code>SBCpip</code> is the Stanford Blood Center (SBC) site-specific package. The main job of <code>SBCpip</code> is to provide functionality tailor-made for the workflow in use at SBC. This task may sometimes be quite involved and prone to change.</p>
-<p>The separation makes it possible for sites to modify both packages to make use of many other features besides those used in the reference.</p>
-<p><strong>Note</strong> Some of the steps described here are SBC-specific and so don’t be surprised if you don’t have access to the data referred to.</p>
+<style>
+<style type="text/css">
+h1 { /* Header 1 */
+  font-size: 28px;
+  color: DarkBlue;
+}
+h2 { /* Header 2 */
+  font-size: 22px;
+  color: DarkBlue;
+}
+h3 { /* Header 3 */
+  font-size: 18px;
+  color: DarkBlue;
+</style>
+<div id="introduction" class="section level1">
+<h1 class="hasAnchor">
+<a href="#introduction" class="anchor"></a>Introduction</h1>
+<p>At a high level, the <code>SBCpip</code> package provides an interface to a model that predicts blood platelet usage based on hospital data over time. It also recommends the number of units that should be collected to satisfy future usage. The model itself is specified in the <code>pip</code> package, and it relies on time-series prediction using a linear program (based on work by <span class="citation">Guan et al. (2017)</span>)</p>
+<p>We anticipate that most users of this package will be practitioners at hospitals and blood centers rather than R developers, so this vignette is concerned with preparing data and setting up the dashboard to make predictions. A fuller technical treatment of the package is given in this <a href="SOP_dev.html">vignette</a>.</p>
 </div>
-<div id="steps" class="section level2">
-<h2 class="hasAnchor">
-<a href="#steps" class="anchor"></a>Steps</h2>
-<p>To get things started, one has to begin with some historical data on the CBC, census and transfusion to get the prediction pipeline going.</p>
-<p>The folder <code>Blood_Center</code> for example contains data for the period April 1, 2017 through April 9, 2018. Note that the file created on April 9, for example, has data from the previous date.</p>
-<p>Such data can be used to build up a <em>seed</em> database to start the prediction pipeline.</p>
-<div id="generating-the-seed-data" class="section level3">
-<h3 class="hasAnchor">
-<a href="#generating-the-seed-data" class="anchor"></a>Generating the Seed Data</h3>
-<p>The seed database is generated exactly once. To build the seed database, follow the procedure below.</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r"><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/library">library</a></span>(SBCpip)
-<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/options">options</a></span>(<span class="dt">warn =</span> <span class="dv">1</span>) ## Report warnings as they appear</code></pre></div>
-<p>The <code>config</code> object is a rather large object that contains all configuration information. It is documented with the package. Specifically, one can specify data folders, report folders and output folders, as the example below shows.</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">## Specify the data location
-config &lt;-<span class="st"> </span><span class="kw"><a href="../reference/set_config_param.html">set_config_param</a></span>(<span class="dt">param =</span> <span class="st">"data_folder"</span>,
-                           <span class="dt">value =</span> <span class="st">"full_path_to_historical_data"</span>)
+<div id="quick-start" class="section level1">
+<h1 class="hasAnchor">
+<a href="#quick-start" class="anchor"></a>Quick Start</h1>
+<p>To get started, enter the following commands in the R console (via terminal command line or in RStudio) :</p>
+<div class="sourceCode" id="cb1"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="fu"><a href="https://rdrr.io/r/utils/install.packages.html">install.packages</a></span><span class="op">(</span><span class="st">"devtools"</span><span class="op">)</span>
+<span class="kw"><a href="https://rdrr.io/r/base/library.html">library</a></span><span class="op">(</span><span class="va"><a href="https://devtools.r-lib.org/">devtools</a></span><span class="op">)</span>
 
-## Specify output folder; existing output files will be overwritten
-<span class="kw"><a href="../reference/set_config_param.html">set_config_param</a></span>(<span class="dt">param =</span> <span class="st">"output_folder"</span>,
-                 <span class="dt">value =</span> <span class="st">"full_path_to_output_folder"</span>)
-
-## Specify report folder; existing output files will be overwritten
-<span class="kw"><a href="../reference/set_config_param.html">set_config_param</a></span>(<span class="dt">param =</span> <span class="st">"report_folder"</span>,
-                 <span class="dt">value =</span> <span class="st">"full_path_to_report_folder"</span>)
-
-## Specify log folder; existing log files will be overwritten
-## Also get a handle on the invisibly returned updated configuration
-config &lt;-<span class="st"> </span><span class="kw"><a href="../reference/set_config_param.html">set_config_param</a></span>(<span class="dt">param =</span> <span class="st">"log_folder"</span>,
-                           <span class="dt">value =</span> <span class="st">"full_path_to_log_folder"</span>)</code></pre></div>
-<p>One can then process all files in the data folder as follows and save the seed data. Note that the files in the data folder are presumed to follow a naming pattern: - <code>LAB-BB-CSRP-CBC*</code> for CBC files - <code>LAB-BB-CSRP-Census*</code> for Census files - <code>LAB-BB-CSRP-Transfused*</code> for transfusion files.</p>
-<p>The <code>process__all_...</code> functions below accept a <code>pattern</code> argument if you want to change them.</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">## This is for creating the seed dataset
-cbc &lt;-<span class="st"> </span><span class="kw"><a href="../reference/process_all_cbc_files.html">process_all_cbc_files</a></span>(<span class="dt">data_folder =</span> config<span class="op">$</span>data_folder,
-                             <span class="dt">cbc_abnormals =</span> config<span class="op">$</span>cbc_abnormals,
-                             <span class="dt">cbc_vars =</span> config<span class="op">$</span>cbc_vars,
-                             <span class="dt">verbose =</span> config<span class="op">$</span>verbose)
-
-census &lt;-<span class="st"> </span><span class="kw"><a href="../reference/process_all_census_files.html">process_all_census_files</a></span>(<span class="dt">data_folder =</span> config<span class="op">$</span>data_folder,
-                                   <span class="dt">locations =</span> config<span class="op">$</span>census_locations,
-                                   <span class="dt">verbose =</span> config<span class="op">$</span>verbose)
-
-transfusion &lt;-<span class="st"> </span><span class="kw"><a href="../reference/process_all_transfusion_files.html">process_all_transfusion_files</a></span>(<span class="dt">data_folder =</span> config<span class="op">$</span>data_folder,
-                                             <span class="dt">verbose =</span> config<span class="op">$</span>verbose)
-
-## Save the SEED dataset so that we can begin the process of building the model.
-## This gets us to date 2018-04-09-08-01-54.txt, so we save data using that date
-<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/readRDS">saveRDS</a></span>(<span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/list">list</a></span>(<span class="dt">cbc =</span> cbc, <span class="dt">census =</span> census, <span class="dt">transfusion =</span> transfusion),
-        <span class="dt">file =</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/file.path">file.path</a></span>(config<span class="op">$</span>output_folder,
-                         <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/sprintf">sprintf</a></span>(config<span class="op">$</span>output_filename_prefix, <span class="st">"2018-04-09"</span>)))</code></pre></div>
-<p>At this point an <code>RDS</code> file is created that is sufficient to get started.</p>
+<span class="fu">devtools</span><span class="fu">::</span><span class="fu"><a href="https://devtools.r-lib.org//reference/remote-reexports.html">install_github</a></span><span class="op">(</span>repo <span class="op">=</span> <span class="st">"https://github.com/okadak126/pip"</span><span class="op">)</span>
+<span class="fu">devtools</span><span class="fu">::</span><span class="fu"><a href="https://devtools.r-lib.org//reference/remote-reexports.html">install_github</a></span><span class="op">(</span>repo <span class="op">=</span> <span class="st">"https://github.com/okadak126/SBCpip"</span><span class="op">)</span>
+<span class="kw"><a href="https://rdrr.io/r/base/library.html">library</a></span><span class="op">(</span><span class="va"><a href="https://github.com/okadak126/pip">pip</a></span><span class="op">)</span>
+<span class="kw"><a href="https://rdrr.io/r/base/library.html">library</a></span><span class="op">(</span><span class="va"><a href="https://bnaras.github.io/SBCpip">SBCpip</a></span><span class="op">)</span></code></pre></div>
+<p>To explore the Prediction Dashboard before preparing actual site-specific data, users can run the following commands to set up a sample data folder (called “platelet_data_sample”):</p>
+<div class="sourceCode" id="cb2"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">sample_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html">system.file</a></span><span class="op">(</span>package <span class="op">=</span> <span class="st">"SBCpip"</span>, <span class="st">"extdata"</span>, <span class="st">"platelet_data_sample.zip"</span><span class="op">)</span>
+<span class="fu"><a href="https://rdrr.io/r/utils/unzip.html">unzip</a></span><span class="op">(</span><span class="va">sample_data</span>, exdir <span class="op">=</span> <span class="st">"mydirectory"</span><span class="op">)</span> 
+<span class="co"># User should adjust the exdir path based on their system. The data folder is "mydirectory/platelet_data_sample"</span></code></pre></div>
+<p>At this point, users can launch the dashboard by running:</p>
+<div class="sourceCode" id="cb3"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="fu"><a href="../reference/sbc_dashboard.html">sbc_dashboard</a></span><span class="op">(</span><span class="op">)</span></code></pre></div>
+<p>Note that there may be additional packages that need to be installed at this point to run the dashboard. Run <code><a href="https://rdrr.io/r/utils/install.packages.html">install.packages("package")</a></code> according to these requirements.</p>
+<p>With the data directory just generated, users can skip to the <strong>Running the Dashboard</strong> section below. Please note that the provided sample data include synthetic data from each of the required file types from November 30, 2019, through May 10, 2020. The format of each of these sample files is based on files originally obtained from the Stanford Blood Center. The section below explains each of the file types in greater detail.</p>
 </div>
-</div>
-<div id="processing-incremental-files" class="section level2">
+<div id="data-preparation" class="section level1">
+<h1 class="hasAnchor">
+<a href="#data-preparation" class="anchor"></a>Data Preparation</h1>
+<div id="overview" class="section level2">
 <h2 class="hasAnchor">
-<a href="#processing-incremental-files" class="anchor"></a>Processing Incremental Files</h2>
-<p>Incremental files are also expected to follow a certain naming pattern. Default patterns are specified in the config variable.</p>
-<ul>
-<li>
-<code>config$cbc_filename_prefix</code> for cbc</li>
-<li>
-<code>config$census_filename_prefix</code> for census</li>
-<li>
-<code>config$transfusion_filename_prefix</code> for transfusion</li>
-<li>
-<code>config$inventory_file_name_prefix</code> for inventory (not used currently)</li>
-</ul>
-<p>One merely sets the data folder to point to the full path of the incremental files which is typically populated every day and proceed as below.</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">## Now process the incremental files
-## Point to folder containing incrementals
-config &lt;-<span class="st"> </span><span class="kw">set_data_folder</span>(<span class="st">"full_path_to_incremental_data"</span>)
-## One may or may not choose to set the incremental reports to go
-## to another location as shown below.
-config &lt;-<span class="st"> </span><span class="kw">set_report_folder</span>(<span class="st">"full_path_to_incremental_data_reports"</span>)
-## Same for output although not shown.
-
-By specifying, the starting and ending dates, one can process all files <span class="cf">in</span> one swoop.</code></pre></div>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">start_date &lt;-<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/as.Date">as.Date</a></span>(<span class="st">"2018-04-10"</span>)
-end_date &lt;-<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/as.Date">as.Date</a></span>(<span class="st">"2018-05-29"</span>)
-all_dates &lt;-<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/seq.Date">seq.Date</a></span>(<span class="dt">from =</span> start_date, <span class="dt">to =</span> end_date, <span class="dt">by =</span> <span class="dv">1</span>)
-
-prediction &lt;-<span class="st"> </span><span class="ot">NULL</span>
-
-<span class="cf">for</span> (i <span class="cf">in</span> <span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/seq">seq_along</a></span>(all_dates)) {
-    date_str &lt;-<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/character">as.character</a></span>(all_dates[i])
-    ##print(date_str)
-    result &lt;-<span class="st"> </span><span class="kw"><a href="../reference/predict_for_date.html">predict_for_date</a></span>(<span class="dt">config =</span> config, <span class="dt">date =</span> date_str)
-    prediction &lt;-<span class="st"> </span><span class="kw"><a href="https://www.rdocumentation.org/packages/base/topics/c">c</a></span>(prediction, result<span class="op">$</span>t_pred)
-}</code></pre></div>
-<p>The above loop goes through several steps.</p>
+<a href="#overview" class="anchor"></a>Overview</h2>
+<p><code>SBCpip</code> relies on 5 different file types. “CBC”, “Census”, and “Surgery” are included as covariates/features in fitting the predictive model, and “Transfusion” contains information about blood product usage Each of the below file types must be added to the same data folder for each date used in making the prediction:</p>
 <ol style="list-style-type: decimal">
-<li>It loads previous day’s data</li>
-<li>It processes the incremental data and appends it to existing data</li>
-<li>It determines if the model needs to be updated. A parameter <code>config$model_update_frequency</code> (default 7) decides how often the model is retrained. The code can detect if the model is to be constructed for the first time!</li>
-<li>If the model is retrained, the training dataset is constructed, scaled, and scaling parameters stored for use in the future. Otherwise, the existing scaling parameters are used to construct the data set for prediction</li>
-<li>The prediction is made and results stored for the next day. The current prediction is the three-day sum.</li>
+<li>
+<strong>CBC:</strong> Results of Complete Blood Count (CBC) tests on hospital patients on a given date. The goal is to identify abnormal levels in hospital patients and use these instances as inputs to the model (1 row = 1 unique measurement)</li>
+<li>
+<strong>Census:</strong> Locations of patients in the hospital system (e.g. rooms, wards) on a given date. The goal is to identify specific locations that are increasing hospital demand for specific blood products. (1 row = 1 unique patient)</li>
+<li>
+<strong>Surgery:</strong> Surgeries carried out by hospital on a given date (or scheduled to be performed in the next 3 days). The goal is to identify particular surgery types that are increasing hospital demand for specific blood products. (1 row = 1 unique operation)</li>
+<li>
+<strong>Transfusion:</strong> Transfusions that occur at the hospital on a given date. This is the response which we try to predict (transfusions over next 2 or 3 days) (1 row = 1 unique transfusion of a blood product).</li>
+<li>
+<strong>Inventory:</strong> Blood products collected and available in inventory for issue to hospital / transfusions. We use this to compare model performance to actual historical protocol (1 row = 1 unit). Note that inventory files should be in .xlsx format.</li>
 </ol>
 </div>
-<div id="daily-routine" class="section level2">
+<div id="data-compatibility" class="section level2">
 <h2 class="hasAnchor">
-<a href="#daily-routine" class="anchor"></a>Daily Routine</h2>
-<p>Thus, for daily routine, all that needs to be done is to call the function</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">result &lt;-<span class="st"> </span><span class="kw"><a href="../reference/predict_for_date.html">predict_for_date</a></span>(<span class="dt">config =</span> config)</code></pre></div>
-<p>This automatically assumes the date to be the current date. It can be specified if necessary using the <code>date</code> argument thus.</p>
-<div class="sourceCode"><pre class="sourceCode r"><code class="sourceCode r">result &lt;-<span class="st"> </span><span class="kw"><a href="../reference/predict_for_date.html">predict_for_date</a></span>(<span class="dt">config =</span> config, <span class="dt">date =</span> <span class="st">"2018-04-30"</span>)</code></pre></div>
-<p>Note that this default daily routine makes the assumption that - the data for day i is available early on day i + 1 - the prediction is done on day i+1 for the purpose of ordering units, i.e. there is sufficient time to be able to do this as regards the logistics - the prediction is really for day i, rather than day i + 1.</p>
-<p>Not paying attention to this can lead to off-by-one migranes!</p>
+<a href="#data-compatibility" class="anchor"></a>Data Compatibility</h2>
+<p>The information contained in each type of file will be organization-specific. Required columns from each file type are stipulated in the template file <code>extdata/sbc_data_mapping.csv</code>, which should be completed by the user prior to running the dashboard. The goal is to create a mapping from site-specific files to the format used by the Stanford Blood Center.</p>
+<p>In order to open the mapping file, run the following commands in R (commands will differ based on operating system):</p>
+<div class="sourceCode" id="cb4"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">sbc_data_mapping</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html">system.file</a></span><span class="op">(</span>package <span class="op">=</span> <span class="st">"SBCpip"</span>, <span class="st">"extdata"</span>, <span class="st">"sbc_data_mapping.csv"</span><span class="op">)</span>
+
+<span class="co"># Windows Users</span>
+<span class="fu"><a href="https://rdrr.io/r/base/system.html">shell</a></span><span class="op">(</span><span class="va">sbc_data_mapping</span>, wait<span class="op">=</span><span class="cn">FALSE</span><span class="op">)</span>
+
+<span class="co"># Mac OS Users</span>
+<span class="fu"><a href="https://rdrr.io/r/base/system.html">system</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span><span class="op">(</span><span class="st">"open "</span>, <span class="va">sbc_data_mapping</span><span class="op">)</span>, wait<span class="op">=</span><span class="cn">FALSE</span><span class="op">)</span></code></pre></div>
+<p>The user should change the values in the “org_data_column_to_edit” column to column names in their organization’s data files that correspond to each column described in the mapping. Below is a summary of the required fields for each file type:</p>
+<table class="table">
+<colgroup>
+<col width="7%">
+<col width="12%">
+<col width="58%">
+<col width="21%">
+</colgroup>
+<thead><tr class="header">
+<th align="left">Data File</th>
+<th align="left">SBC Column Name</th>
+<th align="left">Description</th>
+<th align="left">Data Type/Format</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">cbc</td>
+<td align="left">ORDER_PROC_ID</td>
+<td align="left">CBC Unique Identifier</td>
+<td align="left">Character</td>
+</tr>
+<tr class="even">
+<td align="left">cbc</td>
+<td align="left">BASE_NAME</td>
+<td align="left">Specific blood cell / component type</td>
+<td align="left">Character</td>
+</tr>
+<tr class="odd">
+<td align="left">cbc</td>
+<td align="left">RESULT_TIME</td>
+<td align="left">Datetime at which the test result was obtained</td>
+<td align="left">e.g. 09-Mar-20 00:00:00</td>
+</tr>
+<tr class="even">
+<td align="left">cbc</td>
+<td align="left">ORD_VALUE</td>
+<td align="left">Value obtained for the specific component as a result of the test (coerced to Double)</td>
+<td align="left">Character</td>
+</tr>
+<tr class="odd">
+<td align="left">census</td>
+<td align="left">PAT_ID</td>
+<td align="left">Unique Patient Identifier</td>
+<td align="left">Character</td>
+</tr>
+<tr class="even">
+<td align="left">census</td>
+<td align="left">LOCATION_NAME</td>
+<td align="left">Name of location where patient was present</td>
+<td align="left">Character</td>
+</tr>
+<tr class="odd">
+<td align="left">census</td>
+<td align="left">LOCATION_DT</td>
+<td align="left">Datetime at which patient was logged as present in a specific location/section of the hospital.</td>
+<td align="left">e.g. 01/16/2020 12:00:00AM</td>
+</tr>
+<tr class="even">
+<td align="left">surgery</td>
+<td align="left">LOG_ID</td>
+<td align="left">Unique identifier for set of surgical procedures</td>
+<td align="left">Character</td>
+</tr>
+<tr class="odd">
+<td align="left">surgery</td>
+<td align="left">OR_SERVICE</td>
+<td align="left">Specific type of surgery to be carried out</td>
+<td align="left">Character</td>
+</tr>
+<tr class="even">
+<td align="left">surgery</td>
+<td align="left">SURGERY_DATE</td>
+<td align="left">Datetime of surgical operation</td>
+<td align="left">e.g. 01/29/2020 12:00:00 AM</td>
+</tr>
+<tr class="odd">
+<td align="left">surgery</td>
+<td align="left">FIRST_SCHED_DATE</td>
+<td align="left">Datetime indicating when procedure was first scheduled</td>
+<td align="left">e.g. 01/29/2020 12:00:00 AM</td>
+</tr>
+<tr class="even">
+<td align="left">surgery</td>
+<td align="left">CASE_CLASS</td>
+<td align="left">Indicator of whether surgery is “Elective” or “Urgent”</td>
+<td align="left">Character</td>
+</tr>
+<tr class="odd">
+<td align="left">transfusion</td>
+<td align="left">DIN</td>
+<td align="left">Donation Identification Number that uniquely identifies the group of units transfered</td>
+<td align="left">Character</td>
+</tr>
+<tr class="even">
+<td align="left">transfusion</td>
+<td align="left">Product Code</td>
+<td align="left">Code that uniquely identifies the product</td>
+<td align="left">Character</td>
+</tr>
+<tr class="odd">
+<td align="left">transfusion</td>
+<td align="left">Type</td>
+<td align="left">Specific blood cell / component type being transfused. We focus on “PLT”</td>
+<td align="left">Character</td>
+</tr>
+<tr class="even">
+<td align="left">transfusion</td>
+<td align="left">Issue Date/Time</td>
+<td align="left">Datetime when component is transfused to patient</td>
+<td align="left">e.g. 01/29/2020 12:00:00 AM</td>
+</tr>
+<tr class="odd">
+<td align="left">inventory</td>
+<td align="left">Inv. ID</td>
+<td align="left">Unique identifier for product in inventory</td>
+<td align="left">Character</td>
+</tr>
+<tr class="even">
+<td align="left">inventory</td>
+<td align="left">Type</td>
+<td align="left">The specific type of transfusable product (e.g. “PLT”)</td>
+<td align="left">Character</td>
+</tr>
+<tr class="odd">
+<td align="left">inventory</td>
+<td align="left">Days to Expire</td>
+<td align="left">Number of days after which unit is considered expired</td>
+<td align="left">Integer</td>
+</tr>
+<tr class="even">
+<td align="left">inventory</td>
+<td align="left">Exp. Date</td>
+<td align="left">Specific date on which unit is set to expire</td>
+<td align="left">e.g. 2/4/2020 4:00:00 PM</td>
+</tr>
+<tr class="odd">
+<td align="left">inventory</td>
+<td align="left">Exp. Time</td>
+<td align="left">Specific time on which unit is set to expire</td>
+<td align="left">Double</td>
+</tr>
+</tbody>
+</table>
+<p><!-- 1. **CBC:** (csv/tsv format)
+    * ORDER_PROC_ID: Unique Identifier [Character]
+    * BASE_NAME: Specific blood cell / component type. [Character]
+    * RESULT_TIME: Datetime at which the test result was obtained. [Datetime ("%d-%b-%y %H:%M:%S")]
+    * ORD_VALUE: Value obtained for the specific component as a result of the test [Character - coerced to double]
+
+2. **Census:** (.csv/.tsv format)
+    * PAT_ID: Unique Patient Identifier [Character]
+    * LOCATION_DT: Datetime at which patient was logged as present in a specific location/section of the hospital. [Datetime("%m/%d/%Y  %I:%M:%S%p")]
+    * LOCATION_NAME: Name of location where patient was present. [Character]
+
+3. **Surgery:** (.csv/.tsv format)
+    * LOG_ID: Unique identifier for set of surgical procedures [Character]
+    * SURGERY_DATE: Datetime of procedure [Datetime("%m/%d/%Y  %I:%M:%S %p”)]
+    * FIRST_SCHED_DATE: Datetime indicating when procedure was first scheduled [Datetime("%m/%d/%Y  %I:%M:%S %p”)]
+    * CASE_CLASS: Indicator of whether surgery is “Elective” or “Urgent” [Character]
+    * OR_SERVICE: Specific type of surgery to be carried out. [Character]
+
+4. **Transfusion:** (.csv/.tsv format)
+    * DIN: Donation Identification Number that uniquely identifies the transfused unit [Character]
+    * Issue Date/Time: Datetime when component is transfused to patient [Datetime("%m/%d/%Y  %I:%M:%S %p")]
+    * Type: Specific blood cell / component type being transfused. The code assumes that "PLT" is contained in the set of possible values [Character]
+
+5. **Inventory:** (.xls format)
+    * Inv. ID: Unique identifier for product in inventory [Character]
+    * Type: The specific type of transfusable product (e.g. “PLT”) [Character]
+    * Days to Expire: Number of days after which unit is considered expired [Double]
+    * Exp. Date: Specific date on which unit is set to expire [Datetime("%m/%d/%Y  %I:%M:%S %p")]
+    * Exp. Time: Specific time at which unit is set to expire [Double] --></p>
 </div>
-<div id="shiny-dashboard" class="section level2">
+<div id="additional-cbc-data-preparation" class="section level2">
 <h2 class="hasAnchor">
-<a href="#shiny-dashboard" class="anchor"></a>Shiny Dashboard</h2>
-<p>A shiny dashboard is available for those more used to point-and-click interfaces, invoked via <code><a href="../reference/sbc_dashboard.html">SBCpip::sbc_dashboard()</a></code>.</p>
+<a href="#additional-cbc-data-preparation" class="anchor"></a>Additional CBC Data Preparation</h2>
+<p>The CBC inputs are pre-processed differently from the other files, as the model accepts counts of patients whose CBC levels fall below a certain threshold (or above, in the case of White Blood Cell levels). Quantiles and abnormal levels must be defined for the specific CBC components that the user would like to include as inputs to the model, and this is handled using the provided template file <code>extdata/cbc_thresholds.csv</code>.</p>
+<p>The steps to open and modify this file are similar to those of the mapping file:</p>
+<div class="sourceCode" id="cb5"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">cbc_thresholds</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html">system.file</a></span><span class="op">(</span>package <span class="op">=</span> <span class="st">"SBCpip"</span>, <span class="st">"extdata"</span>, <span class="st">"cbc_thresholds.csv"</span><span class="op">)</span>
+
+<span class="co"># Windows Users</span>
+<span class="fu"><a href="https://rdrr.io/r/base/system.html">shell</a></span><span class="op">(</span><span class="va">cbc_thresholds</span>, wait<span class="op">=</span><span class="cn">FALSE</span><span class="op">)</span>
+
+<span class="co"># Mac OS Users</span>
+<span class="fu"><a href="https://rdrr.io/r/base/system.html">system</a></span><span class="op">(</span><span class="fu"><a href="https://rdrr.io/r/base/paste.html">paste0</a></span><span class="op">(</span><span class="st">"open "</span>, <span class="va">cbc_thresholds</span><span class="op">)</span>, wait<span class="op">=</span><span class="cn">FALSE</span><span class="op">)</span></code></pre></div>
+<p>For each CBC component of interest, the user must specify the following fields in the file (for both quantiles and abnormals):</p>
+<div id="quantiles" class="section level4">
+<h4 class="hasAnchor">
+<a href="#quantiles" class="anchor"></a>Quantiles</h4>
+<ul>
+<li>
+<code>metric</code> = “quantile”</li>
+<li>
+<code>base_name</code> = CBC component, e.g. “PLT”</li>
+<li>
+<code>type</code> = “literal” (quantile is a fixed value) or “quantile” (quantile is computed based with respect to given data)</li>
+<li>
+<code>value</code> = either the literal value (for “literal”) or the p-quantile to be computed (for “quantile”, 0 &lt; p &lt; 1) that defines the threshold below which the patient’s levels would be considered low (high for White Blood Cells)</li>
+</ul>
 </div>
-<div id="references" class="section level2 unnumbered">
+<div id="abnormals" class="section level4">
+<h4 class="hasAnchor">
+<a href="#abnormals" class="anchor"></a>Abnormals</h4>
+<ul>
+<li>
+<code>metric</code> = “abnormal”</li>
+<li>
+<code>base_name</code> = CBC component, e.g. “PLT”</li>
+<li>
+<code>type</code> = “less” or “greater” depending on the direction of abnormality</li>
+<li>
+<code>value</code> = the threshold value below (“less”) or above (“greater”) which we consider the level “abnormal”</li>
+</ul>
+<p>Note that CBC components for which a quantile and abnormal designation is not provided will be ignored as inputs to the model (a warning will be issued). Below is an example of possible entries in the file:</p>
+<table class="table">
+<thead><tr class="header">
+<th align="left">metric</th>
+<th align="left">base_name</th>
+<th align="left">type</th>
+<th align="right">value</th>
+</tr></thead>
+<tbody>
+<tr class="odd">
+<td align="left">quantile</td>
+<td align="left">HGB</td>
+<td align="left">quantile</td>
+<td align="right">0.25</td>
+</tr>
+<tr class="even">
+<td align="left">abnormal</td>
+<td align="left">HGB</td>
+<td align="left">less</td>
+<td align="right">9.00</td>
+</tr>
+</tbody>
+</table>
+<p>The first line would be interpreted as “include in model input counts of patients below the 25th percentile in terms of hemoglobin”. The second line would be interpreted as “consider hemoglobin levels less than 9 to be abnormal”.</p>
+</div>
+</div>
+</div>
+<div id="running-the-dashboard" class="section level1">
+<h1 class="hasAnchor">
+<a href="#running-the-dashboard" class="anchor"></a>Running the Dashboard</h1>
+<!-- ![](dashboard_overview.png) -->
+<p>The Shiny Dashboard interface provides a greatly simplified way to accomplish model training and prediction tasks. It is launched by running the following command:</p>
+<div class="sourceCode" id="cb6"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="kw"><a href="https://rdrr.io/r/base/library.html">library</a></span><span class="op">(</span><span class="va"><a href="https://bnaras.github.io/SBCpip">SBCpip</a></span><span class="op">)</span>
+<span class="fu"><a href="../reference/sbc_dashboard.html">sbc_dashboard</a></span><span class="op">(</span><span class="op">)</span></code></pre></div>
+<p>The Dashboard consists of the following seven tabs, arranged in order of their expected usage for prediction tasks:</p>
+<div id="database-settings" class="section level2">
 <h2 class="hasAnchor">
-<a href="#references" class="anchor"></a>References</h2>
-<div id="refs" class="references">
-<div id="ref-Guan11368">
-<p>Guan, Leying, Xiaoying Tian, Saurabh Gombar, Allison J. Zemek, Gomathi Krishnan, Robert Scott, Balasubramanian Narasimhan, Robert J. Tibshirani, and Tho D. Pham. 2017. “Big Data Modeling to Predict Platelet Usage and Minimize Wastage in a Tertiary Care System.” <em>Proceedings of the National Academy of Sciences</em> 114 (43). National Academy of Sciences: 11368–73. doi:<a href="https://doi.org/10.1073/pnas.1714097114">10.1073/pnas.1714097114</a>.</p>
+<a href="#database-settings" class="anchor"></a>Database Settings</h2>
+<p>This panel allows the user to specify the files, folders, and relevant features to construct the database that will be used in model training and prediction.</p>
+<p><img src="images/1database_settings.png" style="width:70.0%"></p>
+<div id="instructions" class="section level4">
+<h4 class="hasAnchor">
+<a href="#instructions" class="anchor"></a>Instructions:</h4>
+<ol style="list-style-type: decimal">
+<li><p>Specify the local paths to the database, the data folder, and the log folder, as well as filename prefixes for each type of data file under “Filename Patterns”. Then click <strong>Save File Settings</strong>. If you have already done this in a previous session, click <strong>Load File Settings</strong>.</p></li>
+<li><p>Click <strong>Refresh Features</strong> to pull in a complete list of features from each file type in the provided data folder. Use the picklists to select features believed to be the most relevant. Then click <strong>Save Features</strong>. If you have already done this in a previous session, click <strong>Load Features</strong>.</p></li>
+<li><p>Click <strong>Apply Database Settings</strong> and then <strong>Build Database</strong> on the lefthand panel. This operation will take several minutes to complete. It builds a database based on every data file in the specified data folder.</p></li>
+</ol>
+</div>
+<div id="tips" class="section level4">
+<h4 class="hasAnchor">
+<a href="#tips" class="anchor"></a>Tips:</h4>
+<ul>
+<li><p>To determine appropriate paths for the Input and Output Locations, run the following <code><a href="https://rdrr.io/r/base/getwd.html">setwd("~");getwd()</a></code> in the R console. This will return the home directory (e.g. “/Users/myname”). Then append appropriate subfolders such as “/Desktop/mydata”.</p></li>
+<li><p>The DuckDB file need not exist - the program will create it when the database is built.</p></li>
+<li><p>Filename prefixes for each file type should immediately precede the date for the particular file. For example, if the prefix for a Census file is <code>Hospital_Census_Data</code>, the name of the Census file obtained on March 10, 2020, should begin <code>Hospital_Census_Data2020-03-10</code></p></li>
+<li><p>Again, to experiment with synthetic sample data, run the following in R:</p></li>
+</ul>
+<div class="sourceCode" id="cb7"><pre class="downlit sourceCode r">
+<code class="sourceCode R"><span class="va">sample_data</span> <span class="op">&lt;-</span> <span class="fu"><a href="https://rdrr.io/r/base/system.file.html">system.file</a></span><span class="op">(</span>package <span class="op">=</span> <span class="st">"SBCpip"</span>, <span class="st">"extdata"</span>, <span class="st">"platelet_data_sample.zip"</span><span class="op">)</span>
+<span class="fu"><a href="https://rdrr.io/r/utils/unzip.html">unzip</a></span><span class="op">(</span><span class="va">sample_data</span>, exdir <span class="op">=</span> <span class="st">"mydirectory"</span><span class="op">)</span>
+<span class="co"># User should adjust the exdir path based on their system. The data folder is "mydirectory/platelet_data_sample"</span></code></pre></div>
+<hr>
+</div>
+</div>
+<div id="reports" class="section level2">
+<h2 class="hasAnchor">
+<a href="#reports" class="anchor"></a>Reports</h2>
+<p>Reports are primarily for querying and sanity-checking the built database. Provide a range of dates (or a single date) to analyze and click <strong>Summarize</strong>. This displays the mean and standard deviations of each of the features over the date range.</p>
+<p><img src="images/2reports.png" style="width:70.0%"></p>
+<hr>
+</div>
+<div id="model-settings" class="section level2">
+<h2 class="hasAnchor">
+<a href="#model-settings" class="anchor"></a>Model Settings</h2>
+<p>The user sets model training parameters such as the (positive) prediction bias, number of previous days used in training window, and hyperparameter values. The dashboard provides some additional intuition regarding the effects of modifying each of these parameters.</p>
+<p><img src="images/3modelsettings.png" style="width:70.0%"></p>
+<div id="instructions-1" class="section level4">
+<h4 class="hasAnchor">
+<a href="#instructions-1" class="anchor"></a>Instructions</h4>
+<ol style="list-style-type: decimal">
+<li><p>Modify Model Parameters as needed based on the results of model validation. Hovering over each parameter name will display additional information about the impact of adjusting the parameter on model predictions. For a more mathematical treatment of the model parameters, please refer to <strong>Model Description and Behavior</strong> <a href="SOP_dev.html">here</a>.</p></li>
+<li><p>Click “Apply Model Settings”</p></li>
+<li><p>If you would like to clear previous predictions to run a new set of predictions over the same dates, click “Clear Prediction Cache”</p></li>
+</ol>
+<hr>
+</div>
+</div>
+<div id="validate-model-over-range" class="section level2">
+<h2 class="hasAnchor">
+<a href="#validate-model-over-range" class="anchor"></a>Validate Model Over Range</h2>
+<p>The user can run predictions over a specified range of dates and compare the usage predictions and waste generate against “true” values of usage and waste according to the historical protocol.</p>
+<p><img src="images/4a_validaterange.png" style="width:70.0%"></p>
+<div id="instructions-2" class="section level4">
+<h4 class="hasAnchor">
+<a href="#instructions-2" class="anchor"></a>Instructions:</h4>
+<ol style="list-style-type: decimal">
+<li><p>Supply the start and end dates for a date range over which to validate the model settings. Then click <strong>Validate Model</strong>. Note that it is important to understand the range of dates available in the data folder/database. For the given sample data and a training history window of 100 days, Start Date = “2020-03-20” and End Date = “2020-05-05” are appropriate.</p></li>
+<li><p>If you have already run the validation above in a previous session, the predictions should be cached in the database, so click <strong>Summary Table</strong> over the same range of dates.</p></li>
+</ol>
+<p>The result displays a summary of prediction error, waste, shortage, and nonzero coefficients in the model.</p>
+<p><img src="images/4b_validaterange.png" style="width:70.0%"></p>
+</div>
+<div id="tips-1" class="section level4">
+<h4 class="hasAnchor">
+<a href="#tips-1" class="anchor"></a>Tips:</h4>
+<ul>
+<li><p>Depending on the length of the prediction date range and certain <strong>Model Settings</strong> parameters, the validation can take up to 20-30 minutes to complete. A progress bar is provided as shown above.</p></li>
+<li><p>In this toy example, the model drastically outperforms the true (randomized) protocol based on the Inventory Files. In addition to comparing the Model’s Waste and Shortage with those under the true protocol, the RMSE figures break down the model’s raw prediction error by its positive and negative portions, as well as by day of week. In this case, the error is positively biased, which we expect based on the bias parameters specified in <strong>Model Settings</strong>.</p></li>
+<li><p>The right-hand panel displays coefficients with particularly large magnitudes over the course of the validation period (excluding the day of week). This is used to compare importance of specific features driving platelet usage with intuition.</p></li>
+<li><p>Note that the provided “Start Date” and “End Date” do not match the “Prediction Started” and “Prediction Ended” dates. Recall that the <code>start</code> parameter sets a delay between we start running the model for evaluation and when we begin to assess Waste, Shortage, etc. Also note that the validation must end 3 days prior to the specified “End Date” because we compare model predictions against platelet usage for the next 3 days.</p></li>
+</ul>
+<hr>
+</div>
+</div>
+<div id="predict-for-today" class="section level2">
+<h2 class="hasAnchor">
+<a href="#predict-for-today" class="anchor"></a>Predict for Today</h2>
+<p>With a validated model, this mode assumes the user would like to run a prediction of expected platelet usage over the next 3 days (including today) without necessarily being able to validate against ground truth transfusions.</p>
+<p><img src="images/5predicttoday.png" style="width:50.0%"></p>
+<div id="instructions-3" class="section level4">
+<h4 class="hasAnchor">
+<a href="#instructions-3" class="anchor"></a>Instructions:</h4>
+<ol style="list-style-type: decimal">
+<li>Add new data files to the Data Folder from the previous day <span class="math inline">\(i\)</span> (5 files in total - see <strong>Data Preparation</strong>). Each file must include date <span class="math inline">\(i + 1\)</span> (the current day) in the name. In the example above, all 5 filenames should contain “2020-05-07”</li>
+<li>Input this same date in the “Date (i + 1)” field</li>
+<li>Input the number of fresh platelets that will be collected today and tomorrow</li>
+<li>Input the number of remaining inventory platelets expiring at the end of the day today as well as tomorrow.</li>
+<li>Check that the database includes data from the start of the training history window until day <span class="math inline">\(i - 1\)</span> (e.g. using <strong>Reports</strong>), then click <strong>Predict</strong>.</li>
+</ol>
+</div>
+<div id="tips-2" class="section level4">
+<h4 class="hasAnchor">
+<a href="#tips-2" class="anchor"></a>Tips:</h4>
+<ul>
+<li><p>When the user runs <strong>Predict</strong>, data from the new files for day <span class="math inline">\(i\)</span> will automatically be added to the database.</p></li>
+<li><p>The model may or may not need to retrain depending on the <code>model_update_freqency</code> specified in <strong>Model Settings</strong>. In either case, the model also outputs a list of non-zero valued feature coefficients by their absolute value.</p></li>
+</ul>
+<hr>
+</div>
+</div>
+<div id="prediction-plots" class="section level2">
+<h2 class="hasAnchor">
+<a href="#prediction-plots" class="anchor"></a>Prediction Plots</h2>
+<p>This plots 6 line graphs for the specified date range, which can correspond to dates used for prediction in either <strong>Validate Model Over Range</strong> or <strong>Predict for Today</strong>.</p>
+<p><img src="images/6predictionplots.png"></p>
+<div id="summary-of-plots" class="section level4">
+<h4 class="hasAnchor">
+<a href="#summary-of-plots" class="anchor"></a>Summary of Plots</h4>
+<ol style="list-style-type: decimal">
+<li>Predicted vs. actual next-three-day usage for each day (note consistent positive bias to avoid shortage)</li>
+<li>Collection recommendations over time for each day vs. true collections (note that true collection far exceeds recommendation)</li>
+<li>Model’s generated waste vs. number of platelets remaining in inventory that expire the following day (this is a waste precursor)</li>
+<li>True waste vs. number of platelets remaining in inventory that expire the following day (based on policy carried out in practice)</li>
+<li>Model’s shortage vs. number of total platelets remaining in inventory</li>
+<li>True shortage vs. number of platelets remaining in inventory that expire in 2 days (based on policy carried out in practice)</li>
+</ol>
+<hr>
+</div>
+</div>
+<div id="coefficient-plots" class="section level2">
+<h2 class="hasAnchor">
+<a href="#coefficient-plots" class="anchor"></a>Coefficient Plots</h2>
+<p>For a given range of dates with predictions, the user can select coefficients from a picklist, and the dashboard will plot their evolution over time. They are plotted against <code>Coefficient L1 Bound</code> (thick red line), which is the constraint on the absolute value of the sum of the coefficients (this ensures a sparse model by L1 regularization).</p>
+<p>We note from <strong>Validate Model Over Range</strong> that “HGB”, “MCHC”, and “RDW” are prominent covariates - therefore we may be interested in plotting them over time (the same validation date range). This is shown below:</p>
+<p><img src="images/7coefficientplot.png" style="width:70.0%"></p>
+<p>Based on the plot above, it is clear that none of the three selected covariates comprises a significant proportion of the total possible signal (given by the thick red line).</p>
+</div>
+</div>
+<div id="references" class="section level1 unnumbered">
+<h1 class="hasAnchor">
+<a href="#references" class="anchor"></a>References</h1>
+<div id="refs" class="references csl-bib-body hanging-indent">
+<div id="ref-Guan11368" class="csl-entry">
+Guan, Leying, Xiaoying Tian, Saurabh Gombar, Allison J. Zemek, Gomathi Krishnan, Robert Scott, Balasubramanian Narasimhan, Robert J. Tibshirani, and Tho D. Pham. 2017. <span>“Big Data Modeling to Predict Platelet Usage and Minimize Wastage in a Tertiary Care System.”</span> <em>Proceedings of the National Academy of Sciences</em> 114 (43): 11368–73. <a href="https://doi.org/10.1073/pnas.1714097114">https://doi.org/10.1073/pnas.1714097114</a>.
 </div>
 </div>
 </div>
   </div>
 
-  <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
-        <div id="tocnav">
-      <h2 class="hasAnchor">
-<a href="#tocnav" class="anchor"></a>Contents</h2>
-      <ul class="nav nav-pills nav-stacked">
-<li><a href="#introduction">Introduction</a></li>
-      <li><a href="#steps">Steps</a></li>
-      <li><a href="#processing-incremental-files">Processing Incremental Files</a></li>
-      <li><a href="#daily-routine">Daily Routine</a></li>
-      <li><a href="#shiny-dashboard">Shiny Dashboard</a></li>
-      <li><a href="#references">References</a></li>
-      </ul>
+  <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
+
+        <nav id="toc" data-toggle="toc"><h2 data-toc-skip>Contents</h2>
+    </nav>
 </div>
-      </div>
 
 </div>
+
 
 
       <footer><div class="copyright">
@@ -238,12 +583,14 @@ prediction &lt;-<span class="st"> </span><span class="ot">NULL</span>
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.3.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.6.1.</p>
 </div>
+
       </footer>
 </div>
 
   
+
 
   </body>
 </html>

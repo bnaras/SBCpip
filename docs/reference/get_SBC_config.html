@@ -6,23 +6,31 @@
 <meta http-equiv="X-UA-Compatible" content="IE=edge">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-<title>Get the global package variable <code>sbc_config</code>. — get_SBC_config • SBCpip</title>
+<title>Get the global package variable sbc_config. — get_SBC_config • SBCpip</title>
+
 
 <!-- jquery -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.3.1/jquery.min.js" integrity="sha256-FgpCb/KJQlLNfOu91ta32o/NMZxltwRo8QtmkMRdAu8=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.4.1/jquery.min.js" integrity="sha256-CSXorXvZcTkaix6Yvo6HppcZGetbYMGWSFlBw8HfCJo=" crossorigin="anonymous"></script>
 <!-- Bootstrap -->
-<link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.3.7/cerulean/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous" />
+<link href="https://cdnjs.cloudflare.com/ajax/libs/bootswatch/3.4.0/cerulean/bootstrap.min.css" rel="stylesheet" crossorigin="anonymous" />
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.3.7/js/bootstrap.min.js" integrity="sha256-U5ZEeKfGNOja007MMD3YBI0A3OSZOQbeG6z2f2Y0hu8=" crossorigin="anonymous"></script>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/twitter-bootstrap/3.4.1/js/bootstrap.min.js" integrity="sha256-nuL8/2cJ5NDSSwnKD8VqreErSWHtnEP9E7AySL+1ev4=" crossorigin="anonymous"></script>
+
+<!-- bootstrap-toc -->
+<link rel="stylesheet" href="../bootstrap-toc.css">
+<script src="../bootstrap-toc.js"></script>
 
 <!-- Font Awesome icons -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css" integrity="sha256-eZrrJcwDc/3uDhsdt61sL2oOBY362qM3lon1gyExkL0=" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/all.min.css" integrity="sha256-mmgLkCYLUQbXn0B1SRqzHar6dCnv9oZFPEC1g1cwlkk=" crossorigin="anonymous" />
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.12.1/css/v4-shims.min.css" integrity="sha256-wZjR52fzng1pJHwx4aV2AO3yyTOXrcDW7jBpJtTwVxw=" crossorigin="anonymous" />
 
 <!-- clipboard.js -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.4/clipboard.min.js" integrity="sha256-FiZwavyI2V6+EXO1U+xzLG3IKldpiTFf3153ea9zikQ=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/clipboard.js/2.0.6/clipboard.min.js" integrity="sha256-inc5kl9MA1hkeYUt+EC3BhlIgyp/2jDIyBLS6k3UxPI=" crossorigin="anonymous"></script>
 
-<!-- sticky kit -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/sticky-kit/1.1.3/sticky-kit.min.js" integrity="sha256-c4Rlo1ZozqTPE2RLuvbusY3+SU1pQaJC0TjuhygMipw=" crossorigin="anonymous"></script>
+<!-- headroom.js -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/headroom.min.js" integrity="sha256-AsUX4SJE1+yuDu5+mAVzJbuYNPHj/WroHuZ8Ir/CkE0=" crossorigin="anonymous"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/headroom/0.11.0/jQuery.headroom.min.js" integrity="sha256-ZX/yNShbjqsohH1k95liqY9Gd8uOiE1S4vZc+9KQ1K4=" crossorigin="anonymous"></script>
 
 <!-- pkgdown -->
 <link href="../pkgdown.css" rel="stylesheet">
@@ -30,33 +38,36 @@
 
 
 
-<meta property="og:title" content="Get the global package variable <code>sbc_config</code>. — get_SBC_config" />
 
+<meta property="og:title" content="Get the global package variable sbc_config. — get_SBC_config" />
 <meta property="og:description" content="The configuration is a list of items.
   cbc_quantilesa named list of site-specific quantile functions for each CBC of interest
   cbc_abnormalsa named list of site-specific functions that flag values as abnormal or not
   cbc_varsa list of names of CBC variables of interest, i.e. specific values of BASE_NAME
   census_locationsa character vector locations that need to be used for modeling
+  surgery_servicesa character vector of OR services that need to be used for modeling
   c0a value to use in training for c0
-  min_inventorya value to use as offset to ensure a minimum threshold
   history_windowhow many days of history to use in training, default 200
   penalty_factorthe penalty factor in training, default 15
   startthe day when the model evaluation begins, default 10
-  initial_expiry_datathe number of units expiring a day after prediction begins and one day after that, i.e. a 2-vector
   initial_collection_datathe number of units to collect on the prediction day, a day after, and another day after, i.e. a 3-vector
+  initial_expiry_datathe number of units expiring a day after prediction begins and one day after that, i.e. a 2-vector
   data_folderfull path of location of raw data files
-  report_folderfull path of where reports should go, must exist
-  output_folderfull path of where processed output data should go, must exist
   log_folderfull path of where logs should go, must exist
   model_update_frequencyhow often to update the model, default 7 days
+  lag_windownumber of previous days to average in smoothing, default 7 days
   cbc_filename_prefixa character expression describing the prefix of daily CBC file name, this is combined with the date is substituted with the date in YYYY-dd-mm format
   census_filename_prefixa character expression describing the prefix of daily census file name, this is combined with the date is substituted with the date in YYYY-dd-mm format
+  surgery_filename_prefixa character expression describing the prefix of daily surgery file name, this is combined with the date is substituted with the date in YYYY-dd-mm format
   transfusion_filename_prefixa character expression describing the prefix of daily transfusion file name, this is combined with the date is substituted with the date in YYYY-dd-mm format
   output_filename_prefixa character expression describing the prefix of daily output file name, this is combined with the date is substituted with the date in YYYY-dd-mm format
   log_filename_prefixa character expression describing the prefix of log file name, this is combined with the date is substituted with the date in YYYY-dd-mm format
   inventory_filename_prefixa character expression describing the prefix of the inventory file name, this is combined with the date is substituted with the date in YYYY-dd-mm format
+  
+
+
 " />
-<meta name="twitter:card" content="summary" />
+
 
 
 
@@ -70,9 +81,10 @@
 <![endif]-->
 
 
+
   </head>
 
-  <body>
+  <body data-spy="scroll" data-target="#toc">
     <div class="container template-reference-topic">
       <header>
       <div class="navbar navbar-default navbar-fixed-top" role="navigation">
@@ -86,7 +98,7 @@
       </button>
       <span class="navbar-brand">
         <a class="navbar-link" href="../index.html">SBCpip</a>
-        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.3.9</span>
+        <span class="version label label-default" data-toggle="tooltip" data-placement="bottom" title="Released version">0.3-10</span>
       </span>
     </div>
 
@@ -94,7 +106,7 @@
       <ul class="nav navbar-nav">
         <li>
   <a href="../index.html">
-    <span class="fa fa-home fa-lg"></span>
+    <span class="fas fa-home fa-lg"></span>
      
   </a>
 </li>
@@ -109,14 +121,24 @@
   </a>
   <ul class="dropdown-menu" role="menu">
     <li>
-      <a href="../articles/SOP.html">Stanford Blood Center Operating Procedures</a>
+      <a href="../articles/SOP.html">SBCpip Platelet Prediction - Dashboard Procedures</a>
+    </li>
+    <li>
+      <a href="../articles/SOP_dev.html">SBCpip Platelet Prediction - R Approach</a>
     </li>
   </ul>
 </li>
+<li>
+  <a href="../news/index.html">Changelog</a>
+</li>
       </ul>
-      
       <ul class="nav navbar-nav navbar-right">
-        
+        <li>
+  <a href="https://github.com/bnaras/SBCpip/">
+    <span class="fab fa-github fa-lg"></span>
+     
+  </a>
+</li>
       </ul>
       
     </div><!--/.nav-collapse -->
@@ -124,179 +146,207 @@
 </div><!--/.navbar -->
 
       
+
       </header>
 
 <div class="row">
   <div class="col-md-9 contents">
     <div class="page-header">
     <h1>Get the global package variable <code>sbc_config</code>.</h1>
-    
+    <small class="dont-index">Source: <a href='https://github.com/bnaras/SBCpip/blob/master/R/sbc_globals.R'><code>R/sbc_globals.R</code></a></small>
     <div class="hidden name"><code>get_SBC_config.Rd</code></div>
     </div>
 
     <div class="ref-description">
-    
-    <p>The configuration is a list of items.</p><dl class='dl-horizontal'>
+    <p>The configuration is a list of items.</p><dl>
   <dt><code>cbc_quantiles</code></dt><dd><p>a named list of site-specific quantile functions for each CBC of interest</p></dd>
   <dt><code>cbc_abnormals</code></dt><dd><p>a named list of site-specific functions that flag values as abnormal or not</p></dd>
   <dt><code>cbc_vars</code></dt><dd><p>a list of names of CBC variables of interest, i.e. specific values of <code>BASE_NAME</code></p></dd>
   <dt><code>census_locations</code></dt><dd><p>a character vector locations that need to be used for modeling</p></dd>
+  <dt><code>surgery_services</code></dt><dd><p>a character vector of OR services that need to be used for modeling</p></dd>
   <dt><code>c0</code></dt><dd><p>a value to use in training for c0</p></dd>
-  <dt><code>min_inventory</code></dt><dd><p>a value to use as offset to ensure a minimum threshold</p></dd>
   <dt><code>history_window</code></dt><dd><p>how many days of history to use in training, default 200</p></dd>
   <dt><code>penalty_factor</code></dt><dd><p>the penalty factor in training, default 15</p></dd>
   <dt><code>start</code></dt><dd><p>the day when the model evaluation begins, default 10</p></dd>
-  <dt><code>initial_expiry_data</code></dt><dd><p>the number of units expiring a day after prediction begins and one day after that, i.e. a 2-vector</p></dd>
   <dt><code>initial_collection_data</code></dt><dd><p>the number of units to collect on the prediction day, a day after, and another day after, i.e. a 3-vector</p></dd>
+  <dt><code>initial_expiry_data</code></dt><dd><p>the number of units expiring a day after prediction begins and one day after that, i.e. a 2-vector</p></dd>
   <dt><code>data_folder</code></dt><dd><p>full path of location of raw data files</p></dd>
-  <dt><code>report_folder</code></dt><dd><p>full path of where reports should go, must exist</p></dd>
-  <dt><code>output_folder</code></dt><dd><p>full path of where processed output data should go, must exist</p></dd>
   <dt><code>log_folder</code></dt><dd><p>full path of where logs should go, must exist</p></dd>
   <dt><code>model_update_frequency</code></dt><dd><p>how often to update the model, default 7 days</p></dd>
+  <dt><code>lag_window</code></dt><dd><p>number of previous days to average in smoothing, default 7 days</p></dd>
   <dt><code>cbc_filename_prefix</code></dt><dd><p>a character expression describing the prefix of daily CBC file name, this is combined with the date is substituted with the date in YYYY-dd-mm format</p></dd>
   <dt><code>census_filename_prefix</code></dt><dd><p>a character expression describing the prefix of daily census file name, this is combined with the date is substituted with the date in YYYY-dd-mm format</p></dd>
+  <dt><code>surgery_filename_prefix</code></dt><dd><p>a character expression describing the prefix of daily surgery file name, this is combined with the date is substituted with the date in YYYY-dd-mm format</p></dd>
   <dt><code>transfusion_filename_prefix</code></dt><dd><p>a character expression describing the prefix of daily transfusion file name, this is combined with the date is substituted with the date in YYYY-dd-mm format</p></dd>
   <dt><code>output_filename_prefix</code></dt><dd><p>a character expression describing the prefix of daily output file name, this is combined with the date is substituted with the date in YYYY-dd-mm format</p></dd>
   <dt><code>log_filename_prefix</code></dt><dd><p>a character expression describing the prefix of log file name, this is combined with the date is substituted with the date in YYYY-dd-mm format</p></dd>
   <dt><code>inventory_filename_prefix</code></dt><dd><p>a character expression describing the prefix of the inventory file name, this is combined with the date is substituted with the date in YYYY-dd-mm format</p></dd>
+  
+
 </dl>
-    
+
     </div>
 
-    <pre class="usage"><span class='fu'>get_SBC_config</span>()</pre>
-        
+    <pre class="usage"><span class='fu'>get_SBC_config</span><span class='op'>(</span><span class='op'>)</span></pre>
+
+
     <h2 class="hasAnchor" id="value"><a class="anchor" href="#value"></a>Value</h2>
 
     <p>the value of package global <code>sbc_config</code>.</p>
-    
 
     <h2 class="hasAnchor" id="examples"><a class="anchor" href="#examples"></a>Examples</h2>
-    <pre class="examples"><div class='input'><span class='fu'>get_SBC_config</span>()</div><div class='output co'>#&gt; $cbc_quantiles
+    <pre class="examples"><div class='input'><span class='fu'>get_SBC_config</span><span class='op'>(</span><span class='op'>)</span>
+</div><div class='output co'>#&gt; $cbc_quantiles
 #&gt; $cbc_quantiles$HGB
 #&gt; function (x) 
 #&gt; quantile(x, probs = 0.25, na.rm = TRUE)
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29f4908&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_quantiles$LYMAB
 #&gt; function (x) 
 #&gt; quantile(x, probs = 0.25, na.rm = TRUE)
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29f7ee8&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_quantiles$MCH
 #&gt; function (x) 
 #&gt; quantile(x, probs = 0.25, na.rm = TRUE)
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29f7820&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_quantiles$MCHC
 #&gt; function (x) 
 #&gt; 32
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29f6ba8&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_quantiles$MCV
 #&gt; function (x) 
 #&gt; quantile(x, probs = 0.25, na.rm = TRUE)
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29f65f8&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_quantiles$PLT
 #&gt; function (x) 
 #&gt; 150
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29f8630&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_quantiles$RBC
 #&gt; function (x) 
 #&gt; 4.4
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fbf90&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_quantiles$RDW
 #&gt; function (x) 
 #&gt; 12
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fb9a8&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_quantiles$WBC
 #&gt; function (x) 
 #&gt; quantile(x, probs = 0.25, na.rm = TRUE)
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fb0b0&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_quantiles$HCT
 #&gt; function (x) 
 #&gt; 40
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fa780&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; 
 #&gt; $cbc_abnormals
 #&gt; $cbc_abnormals$HGB
 #&gt; function (x) 
 #&gt; x &lt; 9
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fa208&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_abnormals$LYMAB
 #&gt; function (x) 
 #&gt; x &lt; 0.69
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fdac0&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_abnormals$MCH
 #&gt; function (x) 
 #&gt; x &lt; 29
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fd120&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_abnormals$MCHC
 #&gt; function (x) 
 #&gt; x &lt; 32
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fc898&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_abnormals$MCV
 #&gt; function (x) 
 #&gt; x &lt; 87
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fc278&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_abnormals$PLT
 #&gt; function (x) 
 #&gt; x &lt; 150
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29ff548&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_abnormals$RBC
 #&gt; function (x) 
 #&gt; x &lt; 4.4
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f29fef60&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_abnormals$RDW
 #&gt; function (x) 
 #&gt; x &lt; 11.5
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f2a03fc8&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_abnormals$WBC
 #&gt; function (x) 
 #&gt; x &gt; 10.3
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f2a02c50&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; $cbc_abnormals$HCT
 #&gt; function (x) 
 #&gt; x &lt; 34
-#&gt; &lt;environment: 0x7fb2b69b64e0&gt;
+#&gt; &lt;bytecode: 0x7fa0f2a025f8&gt;
+#&gt; &lt;environment: 0x7fa0f29ea070&gt;
 #&gt; 
 #&gt; 
 #&gt; $census_locations
-#&gt;  [1] "B1"                   "B2"                   "B3"                  
-#&gt;  [4] "C1"                   "C2"                   "C3"                  
-#&gt;  [7] "CAPR XFER OVERFL"     "CATH PACU"            "CDU-CLIN DEC UNIT"   
-#&gt; [10] "D1CC"                 "D1CS"                 "D2"                  
-#&gt; [13] "D3"                   "DGR"                  "E1"                  
-#&gt; [16] "E2-ICU"               "E29-ICU"              "E3"                  
-#&gt; [19] "EMERGENCY DEPARTMENT" "F3"                   "FGR"                 
-#&gt; [22] "G1"                   "G2P"                  "G2S"                 
-#&gt; [25] "H1"                   "H2"                  
+#&gt;  [1] "B1"          "B2"          "B3"          "C1"          "C2"         
+#&gt;  [6] "C3"          "E2-ICU"      "E1"          "J2"          "J4"         
+#&gt; [11] "J5"          "J6"          "J7"          "K4"          "K5"         
+#&gt; [16] "K6"          "K7"          "L4"          "L5"          "L6"         
+#&gt; [21] "L7"          "M4"          "M5"          "M6"          "M7"         
+#&gt; [26] "VCP 1 WEST"  "VCP 2 WEST"  "VCP 2 NORTH" "VCP 3 WEST"  "VCP CCU 1"  
+#&gt; [31] "VCP CCU 2"   "VCP NICU"    "VCP NURSERY"
+#&gt; 
+#&gt; $surgery_services
+#&gt; [1] "Transplant"               "Cardiac"                 
+#&gt; [3] "Bone Marrow Transplant"   "Neurosurgery"            
+#&gt; [5] "Thoracic"                 "Vascular"                
+#&gt; [7] "Hepatology"               "General"                 
+#&gt; [9] "Interventional Radiology"
 #&gt; 
 #&gt; $c0
-#&gt; [1] 30
-#&gt; 
-#&gt; $min_inventory
-#&gt; [1] 30
+#&gt; [1] 10
 #&gt; 
 #&gt; $history_window
-#&gt; [1] 200
+#&gt; [1] 100
 #&gt; 
 #&gt; $penalty_factor
 #&gt; [1] 15
+#&gt; 
+#&gt; $prediction_bias
+#&gt; [1] 10
 #&gt; 
 #&gt; $start
 #&gt; [1] 10
@@ -307,23 +357,29 @@
 #&gt; $initial_expiry_data
 #&gt; [1] 0 0
 #&gt; 
+#&gt; $min_inventory
+#&gt; [1] 0
+#&gt; 
 #&gt; $data_folder
-#&gt; [1] "E:/platelet_predict_daily_data"
+#&gt; [1] "home/app/platelet_data_sample"
+#&gt; 
+#&gt; $database_path
+#&gt; [1] "home/app/database.duckdb"
 #&gt; 
 #&gt; $cbc_filename_prefix
-#&gt; [1] "LAB-BB-CSRP-CBC_Daily%s-"
+#&gt; [1] "Hospital_Daily_CBC"
 #&gt; 
 #&gt; $census_filename_prefix
-#&gt; [1] "LAB-BB-CSRP-Census_Daily%s-"
+#&gt; [1] "Hospital_Daily_Census"
 #&gt; 
 #&gt; $transfusion_filename_prefix
-#&gt; [1] "LAB-BB-CSRP-Transfused Product Report_Daily%s-"
+#&gt; [1] "Hospital_Daily_Transfusion"
 #&gt; 
 #&gt; $inventory_filename_prefix
-#&gt; [1] "Daily_Product_Inventory_Report_Morning_To_Folder%s-"
+#&gt; [1] "Daily_Morning_Inventory"
 #&gt; 
-#&gt; $output_filename_prefix
-#&gt; [1] "pip-output-%s.RDS"
+#&gt; $surgery_filename_prefix
+#&gt; [1] "Hospital_Daily_Surgery"
 #&gt; 
 #&gt; $log_filename_prefix
 #&gt; [1] "SBCpip_%s.json"
@@ -331,31 +387,48 @@
 #&gt; $model_update_frequency
 #&gt; [1] 7
 #&gt; 
+#&gt; $lag_window
+#&gt; [1] 7
+#&gt; 
+#&gt; $l1_bounds
+#&gt;  [1] 60 58 56 54 52 50 48 46 44 42 40 38 36 34 32 30 28 26 24 22 20 18 16 14 12
+#&gt; [26] 10  8  6  4  2  0
+#&gt; 
+#&gt; $lag_bounds
+#&gt; [1] -1 10
+#&gt; 
+#&gt; $org_cbc_cols
+#&gt; [1] "ORDER_PROC_ID" "BASE_NAME"     "RESULT_TIME"   "ORD_VALUE"    
+#&gt; 
+#&gt; $org_census_cols
+#&gt; [1] "PAT_ID"        "LOCATION_NAME" "LOCATION_DT"  
+#&gt; 
+#&gt; $org_surgery_cols
+#&gt; [1] "LOG_ID"           "OR_SERVICE"       "SURGERY_DATE"     "FIRST_SCHED_DATE"
+#&gt; [5] "CASE_CLASS"      
+#&gt; 
+#&gt; $org_transfusion_cols
+#&gt; [1] "DIN"             "Product Code"    "Type"            "Issue Date/Time"
+#&gt; 
+#&gt; $org_inventory_cols
+#&gt; [1] "Inv. ID"        "Type"           "Days to Expire" "Exp. Date"     
+#&gt; [5] "Exp. Time"     
+#&gt; 
 #&gt; $cbc_vars
 #&gt; [1] "HGB"   "LYMAB" "MCH"   "MCHC"  "MCV"   "PLT"   "RBC"   "RDW"   "WBC"  
 #&gt; 
-#&gt; $report_folder
-#&gt; [1] "E:/Blood_Center_Reports"
-#&gt; 
-#&gt; $output_folder
-#&gt; [1] "E:/Blood_Center_Output"
-#&gt; 
 #&gt; $log_folder
-#&gt; [1] "E:/Blood_Center_Logs"
+#&gt; [1] "home/app/platelet_logs"
 #&gt; </div><div class='input'>
 </div></pre>
   </div>
-  <div class="col-md-3 hidden-xs hidden-sm" id="sidebar">
-    <h2>Contents</h2>
-    <ul class="nav nav-pills nav-stacked">
-      
-      <li><a href="#value">Value</a></li>
-      
-      <li><a href="#examples">Examples</a></li>
-    </ul>
-
+  <div class="col-md-3 hidden-xs hidden-sm" id="pkgdown-sidebar">
+    <nav id="toc" data-toggle="toc" class="sticky-top">
+      <h2 data-toc-skip>Contents</h2>
+    </nav>
   </div>
 </div>
+
 
       <footer>
       <div class="copyright">
@@ -363,13 +436,16 @@
 </div>
 
 <div class="pkgdown">
-  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.3.0.</p>
+  <p>Site built with <a href="https://pkgdown.r-lib.org/">pkgdown</a> 1.6.1.</p>
 </div>
+
       </footer>
    </div>
 
   
 
+
   </body>
 </html>
+
 
