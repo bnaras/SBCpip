@@ -35,9 +35,11 @@ h3 { /* Header 3 */
 At a high level, the `SBCpip` package provides an interface to a model that predicts blood platelet
 usage based on hospital data over time. It also recommends the number of units that should be 
 collected to satisfy future usage. The model itself is specified in the `pip` package, and it relies 
-on time-series prediction using a linear program (based on work by @Guan11368)
+on time-series prediction using a linear program, based on original work by @Guan11368.
 
-The functionality in this package is most easily accessed using the interactive Shiny Dashboard, which is outlined in this [accompanying vignette](SOP.html). The current vignette is intended for R developers and focuses on how to use the R functions included in this package. It also provides a fuller mathematical description of the model itself (implemented in `pip`).
+The functionality in this package is most easily accessed using the interactive Shiny Dashboard, which is outlined in this [accompanying vignette](SOP_dashboard.html). The current vignette is intended for R developers and focuses on how to use the R functions included in this package. It also provides a fuller mathematical description of the model itself (implemented in `pip`). 
+
+Please note that when running predictions in practice, it is important to prepare site-specific data in a format that is conducive to the model - this process is described [here](SOP_data.html).
 
 On a given day $i$, the model serves to predict blood platelet usage over the following three days, i.e. $t_i := y_{i+1} + y_{i+2} + y_{i+3}$. The assumption is that the practitioner must predict on day $i$ so that units can be collected immediately and screened prior to availability on day $i+3$. For more details, please refer to **Model Description and Behavior**.
 
@@ -61,7 +63,7 @@ also offers many options for site-specific feature customization out of the box.
 # Quick Start
 
 ## Package Installation
-To get started, enter the following commands in the R console (via terminal command line or in RStudio) :
+To get started, enter the following commands in the R console (via terminal command line or in RStudio):
 
 ```{r, eval=FALSE}
 install.packages("devtools")
@@ -75,6 +77,14 @@ library(SBCpip)
 
 
 ## Data Preparation
+
+`SBCpip` relies on 5 different file types. "CBC", "Census", and "Surgery" are included as covariates/features in fitting the predictive model, and "Transfusion" contains information about blood product usage Each of the below file types must be added to the same data folder for each date used in making the prediction:
+
+1. **CBC:** Results of Complete Blood Count (CBC) tests on hospital patients on a given date. The goal is to identify abnormal levels in hospital patients and use these instances as inputs to the model [1 row = 1 unique measurement].
+2. **Census:** Locations of patients in the hospital system (e.g. rooms, wards) on a given date. The goal is to identify specific locations that are increasing hospital demand for specific blood products [1 row = 1 unique patient].
+3. **Surgery:** Surgeries carried out by hospital on a given date (or scheduled to be performed in the next 3 days). The goal is to identify particular surgery types that are increasing hospital demand for specific blood products [1 row = 1 unique operation].
+4. **Transfusion:** Transfusions that occur at the hospital on a given date. This is the response which we try to predict (transfusions over next 2 or 3 days) [1 row = 1 unique transfusion of a blood product].
+5. **Inventory:** Blood products collected and available in inventory for issue to hospital / transfusions. We use this to compare model performance to actual historical protocol [1 row = 1 unit]. Note that inventory files should be in .xlsx format.
 
 Detailed instructions for preparing actual hospital data for predictions are given [here](SOP_dev.html). 
 
@@ -127,6 +137,57 @@ R functions for Steps 2-5 are described in more detail below.
 For a detailed discussion of Step 1, please refer to the "Data Preparation" 
 section. For notes on using the point-and-click interface, please refer to the 
 "Shiny Dashboard" section. The dashboard abstracts away all of the code below. -->
+
+# Model Description and Behavior
+
+## Goal of the Model
+
+On a given day $i$, the model serves to predict blood platelet usage over the following three days, i.e. $t_i = y_{i+1} + y_{i+2} + y_{i+3}$. The assumption is that the practitioner must predict based on complete information from day $i$ so that units can be collected on day $i+1$ and screened prior to availability on day $i+3$.
+
+The model uses the following features:
+
+1. A moving average of recent platelet usage
+2. A binary indicator for each day of the week
+3. Hospital features such as Complete Blood Count (CBC) results for patients, number of patients in specific locations of the hospital, and scheduled surgeries.
+
+For more information on specific hospital features, see this [accompanying vignette on Data Preparation and Compatibility](SOP_data.html). The **Model Training** and **Cross Validation** procedures are implemented in the `pip` package (`LP.R` and `func.R`, respectively). The actual collection recommendation scheme is implemented in the `SBCpip` package.
+
+## Model Training
+
+The model is trained using a linear program API (`lpSolve`). Decision variables include predictions, collections, inventory levels, waste, and shortage, in addition to regression coefficients. Mathematically, let $w \in \mathbb{R}^n$ be a positive vector of waste, $s \in \mathbb{R}^n$ be a positive vector of shortage, and $\pi$ be the amount by which we penalize shortage over waste. $n$ is the number previous days we use to train the model. Both $w$ and $s$ depend on $y$, the vector of true daily platelet usage, and $\hat{t}$, the vector of usage predictions given by the linear model $\hat{t} = Z\beta$, where $Z$ is input data and $\beta$ is a coefficient vector. Assuming platelets expire within 2 days after they are made available to patients, $r_{i}(c)$, $c \in \{1, 2\}$, is defined to be the remaining inventory units at the end of the day on day $i$ expiring at the end of the day on day $i + c$. 
+
+At a high level, the model aims to minimize the following objective with respect to $\beta$:
+
+\[ \sum_{i} w_i(\hat{t}, y) + \pi \sum_{i} s_i(\hat{t}, y)  +  \left[ \lambda_1 \sum_{i} r_{i}(1) + \lambda_2 \sum_{i} r_{i}(2) \right] \]
+
+With $|\lambda_c| \ll 1$, the latter terms are used primarily to ensure the uniqueness of the solution, and to also provide additional penalties on excess inventory that can result in waste. 
+
+The optimization is subject to constraints described in @Guan11368. While the basic predictive model for usage is linear in the features, the linear program enforces a number of additional constraints on the resulting coefficients when the model is fit. For example, coefficients must be chosen such that both waste and shortage generated by the model during the training period are minimized, and the model does not directly penalize for less accurate predictions. This allows the user to specify a bias up or down based on the costliness of wasted units vs. product shortages.
+
+## Model Selection (Cross Validation)
+
+The model also constrains the coefficients for hospital features (3) as a form of L1-regularization (LASSO). This constraint ($L$) is a hyperparameter that is tuned via ($n/14$)-fold cross-validation (CV), where $n$ is the number of training samples. Due to the temporal arrangement of the data, each evaluation fold is not eliminated from the training set entirely. Rather, the optimization problem sets all of the collection amounts during the span of the left-out fold equal to the exact number of platelets used (most efficient case) and ignores any waste and shortage generated during the span of the left-out fold. 
+
+We use the following function for CV loss in order to optimize $L$:
+\[ L_{CV}(\hat{t}_L, y) = ||w(\hat{t}_L, y)||_2^2 + \pi^2||s(\hat{t}_L, y)||_2^2 + \sum_{i}\left( \sum_{j = 1}^3 y_{i + j} - (\hat{t}_{L, i} + b) \right)^2 \]
+
+, where the decision variables are as defined above, and $b$ is a bias to preference higher prediction (it is
+roughly equivalent to $c_0$ but can be set independently).
+
+## Collection Recommendations
+
+With a trained model, the model $\hat{\beta}$ recommends collections for day $i + 1$ (termed $x_{i + 3}$ because the units will be available to patients on day $i + 3$) given information from day $i$ ($z_i$):
+\[ x_{i + 3} = z_i^T\hat{\beta} - x_{i + 1} - x_{i + 2} - \min \left(r_{i}(1), \sum_{j = i - m}^i y_j \right) - r_{i}(2)  \]
+
+Assuming platelets expire within 2 days after they are made available to patients, $r_{i}(c)$, $c \in \{1, 2\}$, is defined to be the remaining inventory units at the end of the day on day $i$ expiring at the end of the day on day $i + c$. 
+
+We assume that $x_{i+1}$ and $x_{i+2}$ are prespecified in accordance with the platelet collection schedule. Thus the *upper bound* on number of platelets that will be available for use over the next 3 days is given by: 
+\[ t_i^{upper} := x_{i + 1} + x_{i + 2} + x_{i + 3} + r_{i}(1) + r_{i}(2) \]
+
+The goal is to predict $\hat{t}_i = z_i^T\hat{\beta} \approx t_i$. Note that $t_i^{upper}$ this is an upper bound because if the number of units expiring on day $i + 1$ ($r_i(c)$) is very large, then many units may be wasted and not usable. More formally, if $r_i(1) > \mathbb{E}[y_i]$, then to a first order approximation, we actually have that:
+\[ t_i \approx x_{i + 1} + x_{i + 2} + x_{i + 3} + \mathbb{E}[y_i] + r_{i}(2) \]
+
+Thus we use $\mathbb{E}[y_i] \approx \sum_{j = i - m}^i y_j$ as a heuristic in the above expression to correct for potential waste ($m$ is set to be the `start` parameter - see **Model Configuration** below).
 
 # Sample Predictive Workflow
 
@@ -201,8 +262,7 @@ db %>% DBI::dbDisconnect(shutdown = TRUE)
 ```
 
 You can now also access data from the database directly without relying on the abstraction functions
-described below. Simply run the following (refer to the **Database Structure** [LINK] section
-for more details):
+described below. Simply run the following (refer to **Database Structure** for more details):
 
 ```{r, eval = FALSE}
 library(dplyr)
@@ -269,23 +329,15 @@ set_config_param(param = "model_update_frequency", value = 4) # default is 7
 
 
 ## Predicting a Single Day Given New Data
+The daily predictive routine assumes that:
+- On the morning of day $i + 1$, the user adds the 5 data files (CBC, Census, Surgery, Transfusion, Inventory) for day $i$ to the data folder specified in `config`. The data files contain the date for day $i + 1$ after their filename prefix.
+- The user then make a prediction of total platelet usage on day $i + 1$, $i + 2$, and $i + 3$ based on information from day $i$ (yesterday).
+- Based on this prediction, the user determines an amount of new platelets that should be collected on day $i + 1$ (today) in order to be made available by day $i + 3$.
 
-The default daily routine makes the assumption that 
-- the data for day $i$ is available early on day $i + 1$
-- the prediction is done on day $i+1$ for the purpose of ordering units,
-  i.e. there is sufficient time to be able to do this as regards the logistics
-- the prediction is really for day $i$, rather than day $i + 1$
+Note that `predict_for_date` automatically adds the new data for day $i$ to the DuckDB database so that it can be used in  future predictions and model retraining. The database need not be rebuilt.
 
-More specifically, this routine assumes that early on day $i + 1$, the user adds 
-the 5 data files (CBC, Census, Surgery, Transfusion, Inventory) for day i to the 
-data folder specified in `config` and makes a prediction of combined future usage 
-on day $i + 1$, $i + 2$, and $i + 3$. `predict_for_date` adds the data for
-the new date to the DuckDB database so that it can be used for future predictions.
-
-Note that as in the model validation case, 
-this assumes we have daily uninterrupted data files from day $i - n + 1$ 
-to day $i$ included in the specified data folder, where $n$ is the number of
-prior training days (the length of the training window).
+As in the model validation case, this routine assumes we have daily uninterrupted data files from day $i - n + 1$ 
+to day $i$ included in the specified data folder, where $n$ is the number of prior training days (parameter `history_window`).
 
 ```{r, eval = FALSE}
 day_iplus1 <- "2021-01-01"
@@ -322,33 +374,6 @@ The user can repeat the previous step until the model automatically retrains
 based on the value specified for `config$model_update_frequency` (i.e. "retrain every x days"). 
 At certain points, it may be prudent to repeat re-tune the model training
 parameters.
-
-# Model Description and Behavior
-
-On a given day $i$, the model serves to predict blood platelet usage over the following three days, i.e. $t_i = y_{i+1} + y_{i+2} + y_{i+3}$. The assumption is that the practitioner must predict on day $i$ so that units can be collected and screened prior to availability on day $i+3$.
-
-The model uses the following features:
-
-1. A moving average of recent platelet usage
-2. A binary indicator for each day of the week
-3. Hospital features such as Complete Blood Count (CBC) results for patients, number of patients in specific locations of the hospital, and scheduled surgeries.
-
-The model is trained using a linear program API (`lpSolve`). Decision variables include predictions, collections, inventory levels, waste, and shortage, in addition to regression coefficients. Mathematically, let $w$ be a positive vector of waste, $s$ be a positive vector of shortage, and $\pi$ be the amount by which we penalize shortage over waste. Both $w$ and $s$ depend on $y$, the vector of true daily platelet usage, and $\hat{t}$, the vector of usage predictions given by the linear model $\hat{t} = Z\beta$, where $Z$ is input data and $\beta$ is a coefficient vector. 
-
-At a high level, the model aims to minimize the following objective with respect to $\beta$:
-
-\[ \sum_{i} w_i(\hat{t}, y) + \pi \sum_{i} s_i(\hat{t}, y) \]
-
-The optimization is subject to constraints described in @Guan11368. While the basic predictive model for usage is linear in the features, the linear program enforces a number of additional constraints on the resulting coefficients when the model is fit. For example, coefficients must be set such that both waste and shortage generated by the model during the training period are minimized, and the model does not directly penalize for less accurate predictions. This allows the user to specify statistical bias up or down based on the costliness of wasted units vs. product shortages.
-
-The model also constrains the coefficients for hospital features (3) as a form of L1-regularization (LASSO). This constraint ($L$) is a hyperparameter that is tuned via ($n/14$)-fold cross-validation (CV), where $n$ is the number of training samples. Due to the temporal arrangement of the data, each evaluation fold is not eliminated from the training set entirely, but rather the optimization problem sets all of the collection amounts during the span of the left-out fold equal to the exact number of platelets used (most efficient case) and ignores any waste and shortage generated during the span of the fold. 
-
-We use the following function for CV loss in order to optimize $L$:
-\[ L_{CV}(\hat{t}_L, y) = ||w(\hat{t}_L, y)||_2^2 + \pi^2||s(\hat{t}_L, y)||_2^2 + \sum_{i}\left( \sum_{j = 1}^3 y_{i + j} - (\hat{t}_{L, i} + b) \right)^2 \]
-
-, where the decision variables are as defined above, and $b$ is a bias to preference higher prediction (it is
-roughly equivalent to $c_0$ but can be set independently).
-
 
 # Model Configuration
 
